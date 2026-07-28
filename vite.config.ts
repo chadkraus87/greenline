@@ -22,14 +22,8 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ["**/*.{js,css,html,svg,woff2}"],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/,
-            handler: "CacheFirst",
-            options: { cacheName: "google-fonts", expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 } }
-          }
-        ]
+        // Fonts are self-hosted (woff2) and precached below — no runtime font cache needed.
+        globPatterns: ["**/*.{js,css,html,svg,woff2}"]
       }
     })
   ],

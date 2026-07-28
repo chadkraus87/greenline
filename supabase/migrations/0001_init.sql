@@ -65,10 +65,13 @@ create trigger on_auth_user_created
 -- Per-user data tables. Every row is owned by user_id (defaults to auth.uid()).
 -- ---------------------------------------------------------------------------
 create table public.settings (
-  user_id       uuid primary key references auth.users (id) on delete cascade default auth.uid(),
-  theme         text    not null default 'dark' check (theme in ('dark', 'light')),
-  clock24       boolean not null default false,
-  start_balance numeric not null default 0
+  user_id          uuid primary key references auth.users (id) on delete cascade default auth.uid(),
+  theme            text    not null default 'dark' check (theme in ('dark', 'light')),
+  clock24          boolean not null default false,
+  start_balance    numeric not null default 0,
+  buffer_floor     numeric not null default 0,
+  extra_debt_budget numeric not null default 0,
+  emergency_months int     not null default 3
 );
 
 create table public.categories (
@@ -89,6 +92,7 @@ create table public.incomes (
   frequency   text not null check (frequency in ('monthly','biweekly','weekly','quarterly','annual','once')),
   anchor_date date not null,
   received    jsonb not null default '{}'::jsonb,
+  tax_rate    numeric not null default 0 check (tax_rate between 0 and 100),
   created_at  timestamptz not null default now()
 );
 
@@ -140,6 +144,30 @@ create table public.events (
   created_at timestamptz not null default now()
 );
 
+create table public.sinking_funds (
+  id             uuid primary key default gen_random_uuid(),
+  user_id        uuid not null references auth.users (id) on delete cascade default auth.uid(),
+  name           text not null,
+  total          numeric not null default 0,
+  cadence_months int  not null default 12 check (cadence_months between 1 and 120),
+  due_date       date not null,
+  saved          numeric not null default 0,
+  category_id    uuid references public.categories (id) on delete set null,
+  color          text not null default '#8FA396',
+  created_at     timestamptz not null default now()
+);
+
+create table public.debts (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references auth.users (id) on delete cascade default auth.uid(),
+  name        text not null,
+  balance     numeric not null default 0,
+  apr         numeric not null default 0 check (apr between 0 and 100),
+  min_payment numeric not null default 0,
+  color       text not null default '#8FA396',
+  created_at  timestamptz not null default now()
+);
+
 -- ---------------------------------------------------------------------------
 -- RLS: a row is visible/editable only by its approved owner.
 -- The DB is the gate — a pending/rejected user's queries return zero rows.
@@ -147,7 +175,7 @@ create table public.events (
 do $$
 declare t text;
 begin
-  foreach t in array array['settings','categories','incomes','bills','expenses','goals','events']
+  foreach t in array array['settings','categories','incomes','bills','expenses','goals','events','sinking_funds','debts']
   loop
     execute format('alter table public.%I enable row level security;', t);
     execute format($p$

@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from "dexie";
-import type { Bill, CalEvent, Category, Expense, Goal, IncomeSource } from "../types";
+import type { Bill, CalEvent, Category, Debt, Expense, Goal, IncomeSource, SinkingFund } from "../types";
 
 interface KV { key: string; value: unknown; }
 
@@ -10,11 +10,12 @@ export class GreenlineDB extends Dexie {
   expenses!: EntityTable<Expense, "id">;
   goals!: EntityTable<Goal, "id">;
   events!: EntityTable<CalEvent, "id">;
+  sinkingFunds!: EntityTable<SinkingFund, "id">;
+  debts!: EntityTable<Debt, "id">;
   kv!: EntityTable<KV, "key">;
 
   constructor(name = "greenline") {
     super(name);
-    // v1 schema. Future migrations: this.version(2).stores({...}).upgrade(tx => ...)
     this.version(1).stores({
       categories: "id",
       incomes: "id",
@@ -23,6 +24,11 @@ export class GreenlineDB extends Dexie {
       goals: "id",
       events: "id, date",
       kv: "key",
+    });
+    // v2 adds sinking funds and debts. Existing tables carry over unchanged.
+    this.version(2).stores({
+      sinkingFunds: "id",
+      debts: "id",
     });
   }
 }

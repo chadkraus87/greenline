@@ -1,12 +1,12 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
-  BarChart3, Check, ChevronLeft, ChevronRight, CircleDollarSign, DatabaseBackup,
-  LayoutDashboard, Moon, PiggyBank, Plus, Receipt, Search, Sun, Undo2, Wallet, X,
+  BarChart3, Check, ChevronLeft, ChevronRight, CircleDollarSign, DatabaseBackup, Landmark,
+  LayoutDashboard, Moon, PiggyBank, Plus, Receipt, Search, Sun, Umbrella, Undo2, Wallet, X,
 } from "lucide-react";
 import { db } from "./db/db";
 import { ensureSeeded, getSettings, patchSettings, DEFAULT_SETTINGS, DEFAULT_CATEGORIES } from "./db/repo";
-import type { Bill, Expense, Goal, IncomeSource, MonthModel } from "./types";
+import type { Bill, Category, Debt, Expense, Goal, IncomeSource, MonthModel, SinkingFund } from "./types";
 import { computeMonth } from "./lib/forecast";
 import { MONTHS } from "./lib/dates";
 import { money } from "./lib/money";
@@ -18,8 +18,10 @@ import { Calendar, DayDetail, EventForm } from "./features/calendar/CalendarFeat
 import { BillForm, BillsView } from "./features/bills/BillsFeature";
 import { IncomeForm, IncomeView } from "./features/income/IncomeFeature";
 import { ExpenseForm, ExpensesView } from "./features/expenses/ExpensesFeature";
-import { BudgetsView } from "./features/budgets/BudgetsView";
+import { BudgetsView, CategoryForm } from "./features/budgets/BudgetsView";
 import { GoalForm, GoalsView } from "./features/goals/GoalsFeature";
+import { DebtForm, DebtsView } from "./features/debts/DebtsFeature";
+import { SinkingFundForm, ReservesView } from "./features/reserves/ReservesFeature";
 const ReportsView = lazy(() => import("./features/reports/ReportsView").then((m) => ({ default: m.ReportsView })));
 import { BackupModal } from "./features/BackupModal";
 import { toggleBillPaid, type UndoFn } from "./db/actions";
@@ -28,12 +30,15 @@ type ModalState =
   | { type: "bill"; data?: Bill } | { type: "income"; data?: IncomeSource }
   | { type: "expense"; data?: Expense; date?: string } | { type: "goal"; data?: Goal }
   | { type: "event"; date?: string } | { type: "day"; date: string }
+  | { type: "debt"; data?: Debt } | { type: "sinking"; data?: SinkingFund }
+  | { type: "category"; data?: Category }
   | { type: "backup" } | null;
 
 const TABS = [
   ["overview", "Overview", LayoutDashboard], ["bills", "Bills", Receipt],
   ["income", "Income", CircleDollarSign], ["expenses", "Expenses", Wallet],
-  ["budgets", "Budgets", BarChart3], ["goals", "Goals", PiggyBank], ["reports", "Reports", BarChart3],
+  ["budgets", "Budgets", BarChart3], ["goals", "Goals", PiggyBank],
+  ["reserves", "Reserves", Umbrella], ["debt", "Debt", Landmark], ["reports", "Reports", BarChart3],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
@@ -62,14 +67,16 @@ export default function App() {
   const expenses = useLiveQuery(() => db.expenses.toArray(), [], []);
   const goals = useLiveQuery(() => db.goals.toArray(), [], []);
   const events = useLiveQuery(() => db.events.toArray(), [], []);
+  const sinkingFunds = useLiveQuery(() => db.sinkingFunds.toArray(), [], []);
+  const debts = useLiveQuery(() => db.debts.toArray(), [], []);
 
   useEffect(() => { document.documentElement.dataset.theme = settings.theme; }, [settings.theme]);
 
   const dayStamp = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours()}`;
   const month: MonthModel = useMemo(
-    () => computeMonth({ settings, categories, incomes, bills, expenses, goals, events }, view.y, view.m, now),
+    () => computeMonth({ settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts }, view.y, view.m, now),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [settings, categories, incomes, bills, expenses, goals, events, view.y, view.m, dayStamp]
+    [settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts, view.y, view.m, dayStamp]
   );
 
   // Clock-driven due-today / overdue alerts (once per bill per session)
@@ -129,8 +136,15 @@ export default function App() {
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--dim)" }}>
           Starting balance
           <input className="gl-input gl-mono" type="number" step="0.01" defaultValue={settings.startBalance || ""}
-            key={`sb-${settings.startBalance}`} placeholder="0.00" style={{ width: 110, padding: "5px 8px" }}
+            key={`sb-${settings.startBalance}`} placeholder="0.00" style={{ width: 100, padding: "5px 8px" }}
             onBlur={(e) => patchSettings({ startBalance: parseFloat(e.target.value) || 0 })} />
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--dim)" }}
+          title="Cash cushion you never want to dip below — the forecast warns when it's crossed">
+          Buffer floor
+          <input className="gl-input gl-mono" type="number" step="0.01" min="0" defaultValue={settings.bufferFloor || ""}
+            key={`bf-${settings.bufferFloor}`} placeholder="0.00" style={{ width: 90, padding: "5px 8px" }}
+            onBlur={(e) => patchSettings({ bufferFloor: Math.max(0, parseFloat(e.target.value) || 0) })} />
         </label>
         <div style={{ position: "relative" }}>
           <Search size={13} style={{ position: "absolute", left: 9, top: 9, color: "var(--dim)" }} />
@@ -147,9 +161,9 @@ export default function App() {
         <Stat label="Expected income" value={money(month.expectedIncome)} sub={`${money(month.actualIncome)} received`} tone="var(--fern)" />
         <Stat label="Spent so far" value={money(month.spent)} sub={`${month.billsPaidCount} bills paid · ${money(month.expensesTotal)} expenses`} />
         <Stat label="Left to spend" value={money(month.remaining)} tone={remainTone}
-          sub={`after ${month.billsRemainingCount} bills + ${money(month.goalMonthly)} savings`} />
+          sub={`after ${month.billsRemainingCount} bills + ${money(month.reserved)} reserved`} />
         <Stat label="Projected month-end" value={money(month.projectedEnd)} tone={month.projectedEnd < 0 ? "var(--clay)" : undefined}
-          sub={month.firstDip ? `⚠ dips negative on day ${month.firstDip.day}` : `health score ${month.health}/100`} />
+          sub={month.firstDip ? `⚠ dips negative on day ${month.firstDip.day}` : month.firstBelowBuffer ? `⚠ below buffer on day ${month.firstBelowBuffer.day}` : `health score ${month.health}/100`} />
       </div>
 
       {month.inMonth && (
@@ -232,7 +246,11 @@ export default function App() {
           onAdd={() => setModal({ type: "expense", date: defaultExpenseDate })}
           onEdit={(e) => setModal({ type: "expense", data: e })} onUndoable={onUndoable} />
       )}
-      {tab === "budgets" && <BudgetsView month={month} categories={categories} />}
+      {tab === "budgets" && (
+        <BudgetsView month={month} categories={categories} elapsedPct={dayProgress}
+          onAddCategory={() => setModal({ type: "category" })}
+          onEditCategory={(c) => setModal({ type: "category", data: c })} />
+      )}
       {tab === "goals" && (
         <>
           <div style={{ marginBottom: 10, textAlign: "right" }}>
@@ -241,9 +259,21 @@ export default function App() {
           <GoalsView goals={goals} onEdit={(g) => setModal({ type: "goal", data: g })} onUndoable={onUndoable} />
         </>
       )}
+      {tab === "reserves" && (
+        <ReservesView funds={sinkingFunds} onAdd={() => setModal({ type: "sinking" })}
+          onEdit={(f) => setModal({ type: "sinking", data: f })} onUndoable={onUndoable} />
+      )}
+      {tab === "debt" && (
+        <>
+          <div style={{ marginBottom: 10, textAlign: "right" }}>
+            <button className="gl-btn primary" onClick={() => setModal({ type: "debt" })}><Plus size={14} /> Add debt</button>
+          </div>
+          <DebtsView debts={debts} settings={settings} onEdit={(d) => setModal({ type: "debt", data: d })} onUndoable={onUndoable} />
+        </>
+      )}
       {tab === "reports" && (
         <Suspense fallback={<div style={{ color: "var(--dim)", padding: 20 }}>Loading charts…</div>}>
-          <ReportsView month={month} categories={categories} />
+          <ReportsView month={month} categories={categories} data={{ settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts }} y={view.y} m={view.m} now={now} />
         </Suspense>
       )}
 
@@ -251,6 +281,9 @@ export default function App() {
       {modal?.type === "income" && <IncomeForm initial={modal.data} defaultDate={month.todayYmd} onClose={() => setModal(null)} />}
       {modal?.type === "expense" && <ExpenseForm initial={modal.data} defaultDate={modal.date ?? defaultExpenseDate} categories={categories} onClose={() => setModal(null)} />}
       {modal?.type === "goal" && <GoalForm initial={modal.data} onClose={() => setModal(null)} />}
+      {modal?.type === "debt" && <DebtForm initial={modal.data} onClose={() => setModal(null)} />}
+      {modal?.type === "sinking" && <SinkingFundForm initial={modal.data} categories={categories} defaultDate={defaultExpenseDate} onClose={() => setModal(null)} />}
+      {modal?.type === "category" && <CategoryForm initial={modal.data} categories={categories} onClose={() => setModal(null)} />}
       {modal?.type === "event" && <EventForm defaultDate={modal.date ?? month.todayYmd} onClose={() => setModal(null)} />}
       {modal?.type === "day" && (
         <DayDetail date={modal.date} month={month} onClose={() => setModal(null)}

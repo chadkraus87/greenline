@@ -1,6 +1,6 @@
 import { db } from "./db";
-import type { Bill, CalEvent, Expense, Goal, IncomeSource } from "../types";
-import { uid } from "../lib/money";
+import type { Bill, CalEvent, Category, Debt, Expense, Goal, IncomeSource, SinkingFund } from "../types";
+import { uid, round2 } from "../lib/money";
 
 /** All mutations in one place. Deletes return an undo closure. */
 export type UndoFn = () => Promise<void>;
@@ -66,3 +66,51 @@ export const saveEvent = async (f: Omit<CalEvent, "id"> & { id?: string }) =>
 export const deleteEvent = async (id: string) => db.events.delete(id);
 
 export const setCategoryLimit = async (id: string, limit: number) => db.categories.update(id, { limit });
+
+// --- Category management (add / rename / recolor / delete) ---
+export const addCategory = async (f: { name: string; color: string; limit?: number }) =>
+  db.categories.add({ id: uid(), name: f.name, color: f.color, limit: f.limit ?? 0 });
+export const updateCategory = async (id: string, patch: Partial<Omit<Category, "id">>) => db.categories.update(id, patch);
+/** Deletes a category and reassigns its bills/expenses to `fallbackId` (undoable). */
+export const deleteCategory = async (id: string, fallbackId: string): Promise<UndoFn | null> => {
+  const cat = await db.categories.get(id);
+  if (!cat) return null;
+  const bills = await db.bills.where("categoryId").equals(id).toArray();
+  const expenses = await db.expenses.where("categoryId").equals(id).toArray();
+  await db.transaction("rw", [db.categories, db.bills, db.expenses], async () => {
+    await Promise.all(bills.map((b) => db.bills.update(b.id, { categoryId: fallbackId })));
+    await Promise.all(expenses.map((e) => db.expenses.update(e.id, { categoryId: fallbackId })));
+    await db.categories.delete(id);
+  });
+  return async () => {
+    await db.transaction("rw", [db.categories, db.bills, db.expenses], async () => {
+      await db.categories.add(cat);
+      await Promise.all(bills.map((b) => db.bills.update(b.id, { categoryId: id })));
+      await Promise.all(expenses.map((e) => db.expenses.update(e.id, { categoryId: id })));
+    });
+  };
+};
+
+// --- Sinking funds (reserve monthly for irregular bills) ---
+export const saveSinkingFund = async (f: Omit<SinkingFund, "id" | "saved"> & { id?: string; saved?: number }) =>
+  f.id ? db.sinkingFunds.update(f.id, f) : db.sinkingFunds.add({ ...f, id: uid(), saved: f.saved ?? 0 });
+export const deleteSinkingFund = async (id: string): Promise<UndoFn | null> => {
+  const s = await db.sinkingFunds.get(id);
+  if (!s) return null;
+  await db.sinkingFunds.delete(id);
+  return async () => { await db.sinkingFunds.add(s); };
+};
+export const contributeToSinkingFund = async (id: string) => {
+  const s = await db.sinkingFunds.get(id);
+  if (s) await db.sinkingFunds.update(id, { saved: round2(Math.min(s.total, s.saved + (s.cadenceMonths > 0 ? s.total / s.cadenceMonths : 0))) });
+};
+
+// --- Debts (payoff tracker) ---
+export const saveDebt = async (f: Omit<Debt, "id"> & { id?: string }) =>
+  f.id ? db.debts.update(f.id, f) : db.debts.add({ ...f, id: uid() });
+export const deleteDebt = async (id: string): Promise<UndoFn | null> => {
+  const d = await db.debts.get(id);
+  if (!d) return null;
+  await db.debts.delete(id);
+  return async () => { await db.debts.add(d); };
+};

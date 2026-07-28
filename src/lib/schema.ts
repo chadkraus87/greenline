@@ -12,6 +12,7 @@ export const incomeSchema = z.object({
   id, name: label, amount,
   frequency: z.enum(["monthly", "biweekly", "weekly", "quarterly", "annual", "once"]),
   anchorDate: dateStr, received: boolMap,
+  taxRate: z.number().min(0).max(100).optional(),
 });
 export const billSchema = z.object({
   id, name: label, amount, categoryId: id, dueDay: z.number().int().min(1).max(31),
@@ -24,10 +25,21 @@ export const expenseSchema = z.object({
 });
 export const goalSchema = z.object({ id, name: label, target: amount, saved: amount.default(0), monthly: amount.default(0), color });
 export const eventSchema = z.object({ id, title: label, date: dateStr, notes: z.string().max(500).optional(), color });
+export const sinkingFundSchema = z.object({
+  id, name: label, total: amount, cadenceMonths: z.number().int().min(1).max(120).default(12),
+  dueDate: dateStr, saved: amount.default(0), color, categoryId: id.optional(),
+});
+export const debtSchema = z.object({
+  id, name: label, balance: amount, apr: z.number().min(0).max(100).default(0),
+  minPayment: amount.default(0), color,
+});
 export const settingsSchema = z.object({
   theme: z.enum(["dark", "light"]).default("dark"),
   clock24: z.boolean().default(false),
   startBalance: z.number().finite().min(-1e9).max(1e9).default(0),
+  bufferFloor: amount.default(0),
+  extraDebtBudget: amount.default(0),
+  emergencyMonths: z.number().min(1).max(24).default(3),
 });
 
 export const appDataSchema = z.object({
@@ -38,5 +50,7 @@ export const appDataSchema = z.object({
   expenses: z.array(expenseSchema),
   goals: z.array(goalSchema),
   events: z.array(eventSchema),
+  sinkingFunds: z.array(sinkingFundSchema).default([]),
+  debts: z.array(debtSchema).default([]),
 });
 export type ValidAppData = z.infer<typeof appDataSchema>;

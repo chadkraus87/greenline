@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Instrument+Sans:wght@400;500;600&family=Spline+Sans+Mono:wght@400;500;600&display=swap');
+/* Fonts are self-hosted via Fontsource (imported in main.tsx) — no external requests. */
 
 :root{
   --ink:#0E1512; --surface:#16201B; --raised:#1C2822; --line:#2A382F;
@@ -18,9 +18,9 @@
 }
 *{box-sizing:border-box}
 html,body,#root{margin:0;min-height:100vh}
-body{font-family:'Instrument Sans',system-ui,sans-serif;background:var(--ink);color:var(--text)}
-.gl-display{font-family:'Fraunces',serif;font-weight:600;letter-spacing:-.01em}
-.gl-mono{font-family:'Spline Sans Mono',monospace;font-variant-numeric:tabular-nums}
+body{font-family:'Instrument Sans Variable','Instrument Sans',system-ui,sans-serif;background:var(--ink);color:var(--text)}
+.gl-display{font-family:'Fraunces Variable','Fraunces',serif;font-weight:600;letter-spacing:-.01em}
+.gl-mono{font-family:'Spline Sans Mono Variable','Spline Sans Mono',monospace;font-variant-numeric:tabular-nums}
 .gl-card{background:var(--surface);border:1px solid var(--line);border-radius:14px}
 .gl-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);
   background:var(--raised);color:var(--text);border-radius:9px;padding:7px 12px;

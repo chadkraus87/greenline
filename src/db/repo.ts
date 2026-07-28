@@ -2,7 +2,10 @@ import { db } from "./db";
 import type { AppData, Settings, Category } from "../types";
 import { validateImport } from "../lib/backup";
 
-export const DEFAULT_SETTINGS: Settings = { theme: "dark", clock24: false, startBalance: 0 };
+export const DEFAULT_SETTINGS: Settings = {
+  theme: "dark", clock24: false, startBalance: 0,
+  bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 3,
+};
 
 export const DEFAULT_CATEGORIES: Category[] = [
   { id: "housing", name: "Housing", color: "#46B380", limit: 0 },
@@ -33,36 +36,36 @@ export async function patchSettings(patch: Partial<Settings>): Promise<void> {
 }
 
 export async function exportAll(): Promise<AppData> {
-  const [settings, categories, incomes, bills, expenses, goals, events] = await Promise.all([
+  const [settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts] = await Promise.all([
     getSettings(), db.categories.toArray(), db.incomes.toArray(), db.bills.toArray(),
-    db.expenses.toArray(), db.goals.toArray(), db.events.toArray(),
+    db.expenses.toArray(), db.goals.toArray(), db.events.toArray(), db.sinkingFunds.toArray(), db.debts.toArray(),
   ]);
-  return { settings, categories, incomes, bills, expenses, goals, events };
+  return { settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts };
 }
+
+const ALL_TABLES = () => [db.categories, db.incomes, db.bills, db.expenses, db.goals, db.events, db.sinkingFunds, db.debts, db.kv];
 
 /** Validates, then atomically replaces the whole database. Throws (leaving data intact) on invalid input. */
 export async function importAll(raw: unknown): Promise<void> {
   const data = validateImport(raw);
-  await db.transaction("rw", [db.categories, db.incomes, db.bills, db.expenses, db.goals, db.events, db.kv], async () => {
+  await db.transaction("rw", ALL_TABLES(), async () => {
     await Promise.all([
-      db.categories.clear(), db.incomes.clear(), db.bills.clear(),
-      db.expenses.clear(), db.goals.clear(), db.events.clear(),
+      db.categories.clear(), db.incomes.clear(), db.bills.clear(), db.expenses.clear(),
+      db.goals.clear(), db.events.clear(), db.sinkingFunds.clear(), db.debts.clear(),
     ]);
     await Promise.all([
       db.categories.bulkAdd(data.categories), db.incomes.bulkAdd(data.incomes),
       db.bills.bulkAdd(data.bills), db.expenses.bulkAdd(data.expenses),
       db.goals.bulkAdd(data.goals), db.events.bulkAdd(data.events),
+      db.sinkingFunds.bulkAdd(data.sinkingFunds), db.debts.bulkAdd(data.debts),
       db.kv.put({ key: "settings", value: data.settings }),
     ]);
   });
 }
 
 export async function resetAll(): Promise<void> {
-  await db.transaction("rw", [db.categories, db.incomes, db.bills, db.expenses, db.goals, db.events, db.kv], async () => {
-    await Promise.all([
-      db.categories.clear(), db.incomes.clear(), db.bills.clear(),
-      db.expenses.clear(), db.goals.clear(), db.events.clear(), db.kv.clear(),
-    ]);
+  await db.transaction("rw", ALL_TABLES(), async () => {
+    await Promise.all(ALL_TABLES().map((t) => t.clear()));
   });
   await ensureSeeded();
 }

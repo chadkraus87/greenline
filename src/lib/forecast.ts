@@ -24,15 +24,24 @@ export function computeMonth(data: AppData, y: number, m: number, today: Date): 
   const expenses = data.expenses.filter((e) => e.date.startsWith(ym));
   const events = data.events.filter((e) => e.date.startsWith(ym));
   const goalMonthly = round2(data.goals.reduce((s, g) => s + (g.monthly || 0), 0));
+  const sinkingReserve = round2(
+    (data.sinkingFunds ?? []).reduce((s, f) => s + (f.cadenceMonths > 0 ? f.total / f.cadenceMonths : 0), 0)
+  );
+  const taxRateOf = new Map(data.incomes.map((i) => [i.id, i.taxRate || 0]));
 
   const expectedIncome = round2(incomeOccs.reduce((s, o) => s + o.amount, 0));
   const actualIncome = round2(incomeOccs.filter((o) => o.received).reduce((s, o) => s + o.amount, 0));
+  const taxReserve = round2(incomeOccs.reduce((s, o) => s + o.amount * ((taxRateOf.get(o.sourceId) || 0) / 100), 0));
   const billsTotal = round2(billOccs.reduce((s, b) => s + b.amount, 0));
   const paidBills = billOccs.filter((b) => b.isPaid);
   const billsPaidTotal = round2(paidBills.reduce((s, b) => s + b.amount, 0));
   const expensesTotal = round2(expenses.reduce((s, e) => s + e.amount, 0));
   const spent = round2(billsPaidTotal + expensesTotal);
-  const remaining = round2(expectedIncome - billsTotal - expensesTotal - goalMonthly);
+  const reserved = round2(goalMonthly + sinkingReserve + taxReserve);
+  const remaining = round2(expectedIncome - billsTotal - expensesTotal - reserved);
+  const savingsRate = expectedIncome > 0
+    ? Math.max(0, Math.min(100, Math.round(((expectedIncome - billsTotal - expensesTotal) / expectedIncome) * 100)))
+    : 0;
 
   const catSpend: Record<string, number> = {};
   for (const e of expenses) catSpend[e.categoryId] = round2((catSpend[e.categoryId] || 0) + e.amount);
@@ -51,6 +60,8 @@ export function computeMonth(data: AppData, y: number, m: number, today: Date): 
   }
   const projectedEnd = forecast[nDays - 1]?.balance ?? (data.settings.startBalance || 0);
   const firstDip = forecast.find((f) => f.balance < 0) ?? null;
+  const bufferFloor = data.settings.bufferFloor || 0;
+  const firstBelowBuffer = bufferFloor > 0 ? (forecast.find((f) => f.balance < bufferFloor) ?? null) : null;
 
   let health = 100;
   for (const c of data.categories) {
@@ -59,12 +70,14 @@ export function computeMonth(data: AppData, y: number, m: number, today: Date): 
   }
   health -= billOccs.filter((b) => b.overdue).length * 8;
   if (projectedEnd < 0) health -= 15;
+  else if (bufferFloor > 0 && projectedEnd < bufferFloor) health -= 8;
   health = Math.max(0, Math.min(100, health));
 
   return {
     ym, nDays, inMonth, todayYmd, incomeOccs, billOccs, expenses, events,
     expectedIncome, actualIncome, billsTotal, billsPaidTotal,
     billsPaidCount: paidBills.length, billsRemainingCount: billOccs.length - paidBills.length,
-    expensesTotal, spent, remaining, goalMonthly, catSpend, forecast, projectedEnd, firstDip, health,
+    expensesTotal, spent, remaining, goalMonthly, sinkingReserve, taxReserve, reserved,
+    catSpend, savingsRate, forecast, projectedEnd, firstDip, firstBelowBuffer, health,
   };
 }

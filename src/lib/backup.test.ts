@@ -3,9 +3,9 @@ import { encryptBackup, decryptBackup, isEncryptedBackup, validateImport } from 
 import type { AppData } from "../types";
 
 const data: AppData = {
-  settings: { theme: "dark", clock24: true, startBalance: 42.5 },
+  settings: { theme: "dark", clock24: true, startBalance: 42.5, bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 3 },
   categories: [{ id: "misc", name: "Misc", color: "#8FA396", limit: 0 }],
-  incomes: [], bills: [], expenses: [], goals: [], events: [],
+  incomes: [], bills: [], expenses: [], goals: [], events: [], sinkingFunds: [], debts: [],
 };
 
 describe("encrypted backups (AES-256-GCM)", () => {

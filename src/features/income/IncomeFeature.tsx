@@ -16,9 +16,11 @@ export function IncomeForm({ initial, defaultDate, onClose }: { initial?: Income
   const [f, setF] = useState({
     name: initial?.name ?? "", amount: initial?.amount?.toString() ?? "",
     frequency: initial?.frequency ?? ("biweekly" as Frequency), anchorDate: initial?.anchorDate ?? defaultDate,
+    taxRate: initial?.taxRate?.toString() ?? "",
   });
   const save = async () => {
-    await act.saveIncome({ id: initial?.id, name: sanitize(f.name), amount: num(f.amount), frequency: f.frequency, anchorDate: f.anchorDate });
+    const taxRate = Math.max(0, Math.min(100, parseFloat(f.taxRate) || 0));
+    await act.saveIncome({ id: initial?.id, name: sanitize(f.name), amount: num(f.amount), frequency: f.frequency, anchorDate: f.anchorDate, taxRate: taxRate || undefined });
     toast(initial ? "Income updated" : "Income source added");
     onClose();
   };
@@ -33,9 +35,15 @@ export function IncomeForm({ initial, defaultDate, onClose }: { initial?: Income
           </select>
         </Field>
       </div>
-      <Field label={f.frequency === "monthly" ? "Pay day (any month, sets the day)" : "First / next payment date"}>
-        <input className="gl-input" type="date" value={f.anchorDate} onChange={(e) => setF({ ...f, anchorDate: e.target.value })} />
-      </Field>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <Field label={f.frequency === "monthly" ? "Pay day (any month, sets the day)" : "First / next payment date"}>
+          <input className="gl-input" type="date" value={f.anchorDate} onChange={(e) => setF({ ...f, anchorDate: e.target.value })} />
+        </Field>
+        <Field label="Tax set-aside %">
+          <input className="gl-input gl-mono" type="number" min="0" max="100" step="1" placeholder="0" value={f.taxRate}
+            onChange={(e) => setF({ ...f, taxRate: e.target.value })} title="For untaxed / self-employment income — reserved from 'left to spend'" />
+        </Field>
+      </div>
       <FormActions onCancel={onClose} onSave={save} saveLabel={initial ? "Save changes" : "Add income"} disabled={!f.name.trim() || !num(f.amount) || !f.anchorDate} />
     </Modal>
   );

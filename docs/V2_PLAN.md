@@ -69,23 +69,27 @@ and the whole compute layer are **reused as-is** — only the data source change
    Visible only to the admin profile.
 5. Keep encrypted/plain **backup export**; **import** now writes to the user's own rows.
 
-## 5. Other improvements bundled into v2 (from the 2026-07-28 review)
+## 5. Improvements — mostly DONE in the current (pre-Supabase) build
 
-- **Fonts:** drop the Google Fonts `@import` (an external request + privacy/latency cost).
-  Replace with **Fontsource** self-hosting — `npm i @fontsource-variable/fraunces
-  @fontsource/instrument-sans @fontsource/spline-sans-mono`, import in `main.tsx`. Fonts get
-  bundled locally: zero third-party requests, no layout shift, offline-safe. (Alternative if
-  you'd rather ship nothing extra: a pure system-font stack — but that loses the Fraunces
-  display look you have now. Recommendation: Fontsource.)
-- **Error boundary:** top-level React error boundary so a stray error never white-screens.
-- **CSV export:** expenses (and a monthly summary) to CSV for taxes / sharing.
-- **User-editable categories:** add / rename / recolor / delete, per user.
-- **CSP + security headers:** update CSP `connect-src` to allow `https://*.supabase.co`;
-  add real HTTP headers at the host (`X-Frame-Options: DENY`, `Strict-Transport-Security`,
-  `X-Content-Type-Options: nosniff`, `Referrer-Policy`). A `vercel.json`/`_headers` file.
-- **CI:** GitHub Actions running typecheck + unit tests + build on every push.
-- **Dev-dependency audit:** revisit the `vite-plugin-pwa`→`workbox-build` advisories
-  (dev-only, not shipped) and bump when a clean release is available.
+Landed 2026-07-28 (browser/Dexie app; all carries over to Supabase unchanged):
+
+- ✅ **Fonts:** self-hosted via Fontsource (`@fontsource-variable/*`), Google Fonts `@import`
+  removed, CSP tightened to `font-src 'self'`. Zero third-party requests.
+- ✅ **Error boundary** (`src/components/ErrorBoundary.tsx`).
+- ✅ **CSV export:** expenses (taxes) + recurring bills, with formula-injection guard.
+- ✅ **User-editable categories:** add / rename / recolor / delete (reassigns rows, undoable).
+- ✅ **HTTP security headers:** `public/_headers` + `vercel.json`
+  (X-Frame-Options, HSTS, nosniff, Referrer-Policy, Permissions-Policy).
+- ✅ **CI:** `.github/workflows/ci.yml` (typecheck + tests + build).
+- ✅ **CPA features:** sinking funds, cash-buffer floor, debt snowball/avalanche, budget-vs-
+  actual variance, subscription audit, emergency fund, burn-rate pacing, savings-rate + net
+  worth, 50/30/20 guide, tax set-aside. Logic in `lib/debt.ts`, `lib/insights.ts`, extended
+  `lib/forecast.ts`; all unit-tested.
+
+Still TODO for the Supabase build:
+- **CSP `connect-src`:** add `https://*.supabase.co` once the client talks to Supabase.
+- **Dev-dependency audit:** `vite-plugin-pwa`→`workbox-build` advisories (dev-only, not
+  shipped) — bump when a clean release exists. Production deps: 0 vulnerabilities.
 
 ## 6. Resumption checklist
 

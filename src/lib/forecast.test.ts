@@ -3,13 +3,13 @@ import { computeMonth } from "./forecast";
 import type { AppData } from "../types";
 
 const base = (): AppData => ({
-  settings: { theme: "dark", clock24: false, startBalance: 500 },
+  settings: { theme: "dark", clock24: false, startBalance: 500, bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 3 },
   categories: [{ id: "housing", name: "Housing", color: "#46B380", limit: 0 }],
   incomes: [{ id: "i1", name: "Pay", amount: 2000, frequency: "monthly", anchorDate: "2026-01-05", received: { "2026-07-05": true } }],
   bills: [{ id: "b1", name: "Rent", amount: 1200, categoryId: "housing", dueDay: 1, priority: "high", paid: {} }],
   expenses: [{ id: "e1", title: "Groceries", amount: 150, categoryId: "housing", date: "2026-07-10" }],
   goals: [{ id: "g1", name: "EF", target: 5000, saved: 100, monthly: 200, color: "#5FA8D3" }],
-  events: [],
+  events: [], sinkingFunds: [], debts: [],
 });
 const today = new Date(2026, 6, 20);
 
