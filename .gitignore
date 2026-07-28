@@ -1,0 +1,16 @@
+node_modules
+dist
+dev-dist
+*.local
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Build & test artifacts
+tsconfig.tsbuildinfo
+coverage
+test-results
+playwright-report
+.DS_Store
