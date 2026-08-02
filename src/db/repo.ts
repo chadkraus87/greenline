@@ -1,12 +1,15 @@
-import { db } from "./db";
+import { supabase } from "../lib/supabase";
 import type { AppData, Settings, Category } from "../types";
 import { validateImport } from "../lib/backup";
+import { emitDataChange } from "../data/sync";
+import * as M from "./mappers";
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: "dark", clock24: false, startBalance: 0,
   bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 3,
 };
 
+// Kept for reference/UI ordering; the DB seeds these per user on approval.
 export const DEFAULT_CATEGORIES: Category[] = [
   { id: "housing", name: "Housing", color: "#46B380", limit: 0 },
   { id: "utilities", name: "Utilities", color: "#5FA8D3", limit: 0 },
@@ -18,54 +21,91 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: "misc", name: "Miscellaneous", color: "#8FA396", limit: 0 },
 ];
 
-/** Seed defaults on first run. */
-export async function ensureSeeded(): Promise<void> {
-  const n = await db.categories.count();
-  if (n === 0) await db.categories.bulkAdd(DEFAULT_CATEGORIES);
-  const s = await db.kv.get("settings");
-  if (!s) await db.kv.put({ key: "settings", value: DEFAULT_SETTINGS });
+async function currentUserId(): Promise<string | null> {
+  const { data } = await supabase.auth.getUser();
+  return data.user?.id ?? null;
 }
 
 export async function getSettings(): Promise<Settings> {
-  const row = await db.kv.get("settings");
-  return { ...DEFAULT_SETTINGS, ...((row?.value as Partial<Settings>) ?? {}) };
+  const { data } = await supabase.from("settings").select("*").maybeSingle();
+  return data ? M.settingsFromRow(data) : DEFAULT_SETTINGS;
 }
+
 export async function patchSettings(patch: Partial<Settings>): Promise<void> {
+  const uid = await currentUserId();
+  if (!uid) return;
   const cur = await getSettings();
-  await db.kv.put({ key: "settings", value: { ...cur, ...patch } });
+  const next = { ...cur, ...patch };
+  await supabase.from("settings").upsert({ user_id: uid, ...M.settingsToRow(next) });
+  emitDataChange();
 }
 
-export async function exportAll(): Promise<AppData> {
+/** Full snapshot of the signed-in user's data (RLS scopes every query to them). */
+export async function loadAll(): Promise<AppData> {
   const [settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts] = await Promise.all([
-    getSettings(), db.categories.toArray(), db.incomes.toArray(), db.bills.toArray(),
-    db.expenses.toArray(), db.goals.toArray(), db.events.toArray(), db.sinkingFunds.toArray(), db.debts.toArray(),
+    getSettings(),
+    supabase.from("categories").select("*").order("sort_order").order("name"),
+    supabase.from("incomes").select("*"),
+    supabase.from("bills").select("*"),
+    supabase.from("expenses").select("*").order("date"),
+    supabase.from("goals").select("*"),
+    supabase.from("events").select("*"),
+    supabase.from("sinking_funds").select("*"),
+    supabase.from("debts").select("*"),
   ]);
-  return { settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts };
+  return {
+    settings,
+    categories: (categories.data ?? []).map(M.categoryFromRow),
+    incomes: (incomes.data ?? []).map(M.incomeFromRow),
+    bills: (bills.data ?? []).map(M.billFromRow),
+    expenses: (expenses.data ?? []).map(M.expenseFromRow),
+    goals: (goals.data ?? []).map(M.goalFromRow),
+    events: (events.data ?? []).map(M.eventFromRow),
+    sinkingFunds: (sinkingFunds.data ?? []).map(M.sinkingFromRow),
+    debts: (debts.data ?? []).map(M.debtFromRow),
+  };
 }
 
-const ALL_TABLES = () => [db.categories, db.incomes, db.bills, db.expenses, db.goals, db.events, db.sinkingFunds, db.debts, db.kv];
+export const exportAll = loadAll;
 
-/** Validates, then atomically replaces the whole database. Throws (leaving data intact) on invalid input. */
+const DATA_TABLES = ["categories", "incomes", "bills", "expenses", "goals", "events", "sinking_funds", "debts"] as const;
+
+async function clearUserData(uid: string): Promise<void> {
+  // RLS already scopes to the user; the explicit filter is defense-in-depth.
+  for (const t of DATA_TABLES) await supabase.from(t).delete().eq("user_id", uid);
+}
+
+/** Validate, then replace the signed-in user's data with the backup's contents. */
 export async function importAll(raw: unknown): Promise<void> {
   const data = validateImport(raw);
-  await db.transaction("rw", ALL_TABLES(), async () => {
-    await Promise.all([
-      db.categories.clear(), db.incomes.clear(), db.bills.clear(), db.expenses.clear(),
-      db.goals.clear(), db.events.clear(), db.sinkingFunds.clear(), db.debts.clear(),
-    ]);
-    await Promise.all([
-      db.categories.bulkAdd(data.categories), db.incomes.bulkAdd(data.incomes),
-      db.bills.bulkAdd(data.bills), db.expenses.bulkAdd(data.expenses),
-      db.goals.bulkAdd(data.goals), db.events.bulkAdd(data.events),
-      db.sinkingFunds.bulkAdd(data.sinkingFunds), db.debts.bulkAdd(data.debts),
-      db.kv.put({ key: "settings", value: data.settings }),
-    ]);
-  });
+  const uid = await currentUserId();
+  if (!uid) throw new Error("Not signed in");
+  await clearUserData(uid);
+  await supabase.from("settings").upsert({ user_id: uid, ...M.settingsToRow(data.settings) });
+  // Categories first so bill/expense category_id references resolve.
+  if (data.categories.length) throwOn(await supabase.from("categories").insert(data.categories.map((c, i) => M.categoryToRow(c, i))));
+  await Promise.all([
+    data.incomes.length && supabase.from("incomes").insert(data.incomes.map(M.incomeToRow)),
+    data.bills.length && supabase.from("bills").insert(data.bills.map(M.billToRow)),
+    data.expenses.length && supabase.from("expenses").insert(data.expenses.map(M.expenseToRow)),
+    data.goals.length && supabase.from("goals").insert(data.goals.map(M.goalToRow)),
+    data.events.length && supabase.from("events").insert(data.events.map(M.eventToRow)),
+    data.sinkingFunds.length && supabase.from("sinking_funds").insert(data.sinkingFunds.map(M.sinkingToRow)),
+    data.debts.length && supabase.from("debts").insert(data.debts.map(M.debtToRow)),
+  ]);
+  emitDataChange();
 }
 
+/** Wipe the user's data and reseed the default categories + settings. */
 export async function resetAll(): Promise<void> {
-  await db.transaction("rw", ALL_TABLES(), async () => {
-    await Promise.all(ALL_TABLES().map((t) => t.clear()));
-  });
-  await ensureSeeded();
+  const uid = await currentUserId();
+  if (!uid) throw new Error("Not signed in");
+  await clearUserData(uid);
+  await supabase.from("categories").insert(DEFAULT_CATEGORIES.map((c, i) => M.categoryToRow({ ...c, id: crypto.randomUUID() }, i)));
+  await supabase.from("settings").upsert({ user_id: uid, ...M.settingsToRow(DEFAULT_SETTINGS) });
+  emitDataChange();
+}
+
+function throwOn(res: { error: unknown }): void {
+  if (res.error) throw res.error;
 }

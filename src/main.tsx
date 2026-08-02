@@ -5,16 +5,19 @@ import "@fontsource-variable/fraunces";
 import "@fontsource-variable/instrument-sans";
 import "@fontsource-variable/spline-sans-mono";
 import "./index.css";
-import App from "./App";
+import { Root } from "./Root";
 import { ToastProvider } from "./hooks/useToasts";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { AuthProvider } from "./auth/AuthProvider";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ErrorBoundary>
-      <ToastProvider>
-        <App />
-      </ToastProvider>
+      <AuthProvider>
+        <ToastProvider>
+          <Root />
+        </ToastProvider>
+      </AuthProvider>
     </ErrorBoundary>
   </StrictMode>
 );

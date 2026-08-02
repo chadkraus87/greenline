@@ -63,7 +63,7 @@ export function BackupModal({ onClose }: { onClose: () => void }) {
   return (
     <Modal title="Backups" onClose={onClose}>
       <p style={{ fontSize: 13, color: "var(--dim)", marginTop: 6 }}>
-        Backups are files on your device — nothing is uploaded anywhere. Encrypted backups use AES-256-GCM with a key derived from your passphrase.
+        Export a copy of your data to keep, or restore from one (restoring replaces your account's data). Encrypted backups use AES-256-GCM with a key derived from your passphrase.
       </p>
       <Field label="Passphrase (for encrypted export / restore)">
         <input className="gl-input" type="password" value={pass} onChange={(e) => setPass(e.target.value)}

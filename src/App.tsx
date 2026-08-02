@@ -1,17 +1,18 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { useLiveQuery } from "dexie-react-hooks";
 import {
   BarChart3, Check, ChevronLeft, ChevronRight, CircleDollarSign, DatabaseBackup, Landmark,
-  LayoutDashboard, Moon, PiggyBank, Plus, Receipt, Search, Sun, Umbrella, Undo2, Wallet, X,
+  LayoutDashboard, LogOut, Moon, PiggyBank, Plus, Receipt, Search, ShieldCheck, Sun, Umbrella, Undo2, Wallet, X,
 } from "lucide-react";
-import { db } from "./db/db";
-import { ensureSeeded, getSettings, patchSettings, DEFAULT_SETTINGS, DEFAULT_CATEGORIES } from "./db/repo";
+import { patchSettings } from "./db/repo";
 import type { Bill, Category, Debt, Expense, Goal, IncomeSource, MonthModel, SinkingFund } from "./types";
 import { computeMonth } from "./lib/forecast";
 import { MONTHS } from "./lib/dates";
 import { money } from "./lib/money";
 import { useNow } from "./hooks/useNow";
 import { useToast } from "./hooks/useToasts";
+import { useAppData } from "./hooks/useAppData";
+import { useAuth } from "./auth/AuthProvider";
+import { AdminPanel } from "./features/admin/AdminPanel";
 import { LiveClock, Stat, ViewHeader, Empty } from "./components/ui";
 import { Runway } from "./components/Runway";
 import { Calendar, DayDetail, EventForm } from "./features/calendar/CalendarFeature";
@@ -32,7 +33,7 @@ type ModalState =
   | { type: "event"; date?: string } | { type: "day"; date: string }
   | { type: "debt"; data?: Debt } | { type: "sinking"; data?: SinkingFund }
   | { type: "category"; data?: Category }
-  | { type: "backup" } | null;
+  | { type: "backup" } | { type: "admin" } | null;
 
 const TABS = [
   ["overview", "Overview", LayoutDashboard], ["bills", "Bills", Receipt],
@@ -45,7 +46,8 @@ type Tab = (typeof TABS)[number][0];
 export default function App() {
   const toast = useToast();
   const now = useNow();
-  const [seeded, setSeeded] = useState(false);
+  const { profile, signOut } = useAuth();
+  const { data, loading } = useAppData();
   const [view, setView] = useState(() => ({ y: new Date().getFullYear(), m: new Date().getMonth() }));
   const [tab, setTab] = useState<Tab>("overview");
   const [modal, setModal] = useState<ModalState>(null);
@@ -53,22 +55,15 @@ export default function App() {
   const [undo, setUndo] = useState<{ label: string; fn: UndoFn } | null>(null);
   const notified = useRef(new Set<string>());
 
-  useEffect(() => { ensureSeeded().then(() => setSeeded(true)); }, []);
-
-  const settings = useLiveQuery(getSettings, [], DEFAULT_SETTINGS);
-  // Dexie returns rows in primary-key (alphabetical) order; present categories in the
-  // canonical seed order so pickers default to Housing and Budgets read top-to-bottom.
-  const categoriesRaw = useLiveQuery(() => db.categories.toArray(), [], []);
-  const catOrder = DEFAULT_CATEGORIES.map((c) => c.id);
-  const rank = (id: string) => { const i = catOrder.indexOf(id); return i === -1 ? catOrder.length : i; };
-  const categories = useMemo(() => [...categoriesRaw].sort((a, b) => rank(a.id) - rank(b.id)), [categoriesRaw]);
-  const incomes = useLiveQuery(() => db.incomes.toArray(), [], []);
-  const bills = useLiveQuery(() => db.bills.toArray(), [], []);
-  const expenses = useLiveQuery(() => db.expenses.toArray(), [], []);
-  const goals = useLiveQuery(() => db.goals.toArray(), [], []);
-  const events = useLiveQuery(() => db.events.toArray(), [], []);
-  const sinkingFunds = useLiveQuery(() => db.sinkingFunds.toArray(), [], []);
-  const debts = useLiveQuery(() => db.debts.toArray(), [], []);
+  const settings = data?.settings ?? { theme: "dark" as const, clock24: false, startBalance: 0, bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 3 };
+  const categories = data?.categories ?? [];
+  const incomes = data?.incomes ?? [];
+  const bills = data?.bills ?? [];
+  const expenses = data?.expenses ?? [];
+  const goals = data?.goals ?? [];
+  const events = data?.events ?? [];
+  const sinkingFunds = data?.sinkingFunds ?? [];
+  const debts = data?.debts ?? [];
 
   useEffect(() => { document.documentElement.dataset.theme = settings.theme; }, [settings.theme]);
 
@@ -96,7 +91,7 @@ export default function App() {
     }
   }, [month, toast]);
 
-  if (!seeded) {
+  if (loading && !data) {
     return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", color: "var(--dim)" }}>Loading your ledger…</div>;
   }
 
@@ -115,7 +110,7 @@ export default function App() {
       <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
         <div>
           <h1 className="gl-display" style={{ fontSize: 24, color: "var(--fern)", margin: 0 }}>Greenline</h1>
-          <div style={{ fontSize: 11.5, color: "var(--dim)" }}>Private monthly budget · everything stays on this device</div>
+          <div style={{ fontSize: 11.5, color: "var(--dim)" }}>Private monthly budget · secured to your account</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <LiveClock now={now} clock24={settings.clock24} onToggle={() => patchSettings({ clock24: !settings.clock24 })} />
@@ -124,6 +119,10 @@ export default function App() {
             {settings.theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
           </button>
           <button className="gl-icon-btn" aria-label="Backups" title="Backups" onClick={() => setModal({ type: "backup" })}><DatabaseBackup size={15} /></button>
+          {profile?.role === "admin" && (
+            <button className="gl-icon-btn" aria-label="Admin — manage users" title="Admin — manage users" onClick={() => setModal({ type: "admin" })}><ShieldCheck size={15} /></button>
+          )}
+          <button className="gl-icon-btn" aria-label="Sign out" title={`Sign out (${profile?.email ?? ""})`} onClick={signOut}><LogOut size={15} /></button>
         </div>
       </header>
 
@@ -292,6 +291,7 @@ export default function App() {
           onEditExpense={(e) => setModal({ type: "expense", data: e })} />
       )}
       {modal?.type === "backup" && <BackupModal onClose={() => setModal(null)} />}
+      {modal?.type === "admin" && <AdminPanel onClose={() => setModal(null)} />}
 
       {undo && (
         <div className="gl-toast" style={{ bottom: 70 }}>

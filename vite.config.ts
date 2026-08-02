@@ -11,7 +11,7 @@ export default defineConfig({
       manifest: {
         name: "Greenline — Monthly Budget",
         short_name: "Greenline",
-        description: "Privacy-first monthly budget tracker. Everything stays on your device.",
+        description: "A private monthly budget tracker. Your data is secured to your own account.",
         theme_color: "#0E1512",
         background_color: "#0E1512",
         display: "standalone",

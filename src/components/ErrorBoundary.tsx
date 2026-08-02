@@ -13,7 +13,6 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // Local-only app: log to the console for debugging, nothing leaves the device.
     console.error("Greenline crashed:", error, info.componentStack);
   }
 
@@ -24,7 +23,7 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="gl-card" style={{ maxWidth: 460, padding: 24, textAlign: "center" }}>
           <div className="gl-display" style={{ fontSize: 20, color: "var(--clay)", marginBottom: 8 }}>Something went wrong</div>
           <p style={{ fontSize: 14, color: "var(--dim)", marginTop: 0 }}>
-            Your data is safe — it's stored on this device and wasn't affected. Reloading usually fixes it.
+            Your data is safe in your account and wasn't affected. Reloading usually fixes it.
           </p>
           <pre style={{ fontSize: 11, color: "var(--dim)", background: "var(--raised)", borderRadius: 8, padding: 10, overflowX: "auto", textAlign: "left" }}>
             {this.state.error.message}

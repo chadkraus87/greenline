@@ -38,6 +38,7 @@ body{font-family:'Instrument Sans Variable','Instrument Sans',system-ui,sans-ser
   background:var(--raised);color:var(--text);font:inherit;font-size:14px}
 .gl-label{display:block;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
   color:var(--dim);margin:10px 0 4px}
+.gl-linkbtn{border:none;background:none;color:var(--fern);font:inherit;font-weight:500;cursor:pointer;padding:0;text-decoration:underline}
 .gl-tab{border:none;background:none;color:var(--dim);font:inherit;font-size:13.5px;font-weight:500;
   padding:9px 13px;border-radius:9px;cursor:pointer;display:inline-flex;gap:7px;align-items:center;white-space:nowrap}
 .gl-tab[aria-selected="true"]{background:var(--fern-soft);color:var(--fern)}
