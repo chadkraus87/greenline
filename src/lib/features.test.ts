@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { simulatePayoff, comparePayoff } from "./debt";
-import { monthlyHistory, netWorth, emergencyFund, categoryVariance, burnPace } from "./insights";
+import { monthlyHistory, netWorth, emergencyFund, categoryVariance, burnPace, categoryRollover } from "./insights";
 import { computeMonth } from "./forecast";
 import type { AppData, Debt } from "../types";
 
 const empty = (over: Partial<AppData> = {}): AppData => ({
-  settings: { theme: "dark", clock24: false, startBalance: 0, bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 3 },
+  settings: { theme: "dark", clock24: false, startBalance: 0, bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 3, rolloverBudgets: false },
   categories: [], incomes: [], bills: [], expenses: [], goals: [], events: [], sinkingFunds: [], debts: [],
   ...over,
 });
@@ -64,7 +64,7 @@ describe("forecast reserves & buffer", () => {
 
   it("buffer floor flags the crossing day and docks health", () => {
     const d = empty({
-      settings: { theme: "dark", clock24: false, startBalance: 300, bufferFloor: 500, extraDebtBudget: 0, emergencyMonths: 3 },
+      settings: { theme: "dark", clock24: false, startBalance: 300, bufferFloor: 500, extraDebtBudget: 0, emergencyMonths: 3, rolloverBudgets: false },
       bills: [{ id: "b", name: "Rent", amount: 100, categoryId: "c", dueDay: 5, priority: "normal", paid: {} }],
     });
     const m = computeMonth(d, 2026, 6, today);
@@ -87,7 +87,7 @@ describe("insights", () => {
   });
   it("emergency fund target scales with months", () => {
     const d = empty({
-      settings: { theme: "dark", clock24: false, startBalance: 0, bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 6 },
+      settings: { theme: "dark", clock24: false, startBalance: 0, bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 6, rolloverBudgets: false },
       bills: [{ id: "b", name: "Rent", amount: 1000, categoryId: "c", dueDay: 1, priority: "normal", paid: {} }],
     });
     const m = computeMonth(d, 2026, 6, today);
@@ -103,6 +103,24 @@ describe("insights", () => {
     const v = categoryVariance(d, 2026, 6, today, 1).find((c) => c.id === "food")!;
     expect(v.avgSpend).toBe(150);
     expect(v.variancePct).toBe(50);
+  });
+  it("rollover accumulates unspent budget from prior months", () => {
+    const d = empty({ categories: [{ id: "food", name: "Food", color: "#000", limit: 100 }] });
+    // 3 clean months before July with nothing spent → 3 × $100 carried in.
+    expect(categoryRollover(d, 2026, 6, today, 3).food).toBe(300);
+  });
+  it("rollover is reduced by overspending and never goes negative", () => {
+    const cats = [{ id: "food", name: "Food", color: "#000", limit: 100 }];
+    // One prior month (June) blown by $500 against a $100 limit → floors at 0.
+    const over = empty({ categories: cats, expenses: [{ id: "e", title: "x", amount: 600, categoryId: "food", date: "2026-06-10" }] });
+    expect(categoryRollover(over, 2026, 6, today, 1).food).toBe(0);
+    // Partial spend: June limit 100, spent 40 → 60 carried.
+    const partial = empty({ categories: cats, expenses: [{ id: "e", title: "x", amount: 40, categoryId: "food", date: "2026-06-10" }] });
+    expect(categoryRollover(partial, 2026, 6, today, 1).food).toBe(60);
+  });
+  it("categories without a limit are not tracked for rollover", () => {
+    const d = empty({ categories: [{ id: "misc", name: "Misc", color: "#000", limit: 0 }] });
+    expect(categoryRollover(d, 2026, 6, today, 3).misc).toBeUndefined();
   });
   it("burn pace flags a category spending faster than the month elapses", () => {
     const d = empty({

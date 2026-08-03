@@ -1,0 +1,41 @@
+name: Encrypted backup
+
+# Independent, off-site copy of the database. Supabase Pro already takes daily
+# backups; this one is held by you, so a lost or locked Supabase account never
+# means lost financial history.
+#
+# Requires three repository secrets (Settings → Secrets and variables → Actions):
+#   SUPABASE_URL                https://kiukzqxiciymhomkimtf.supabase.co
+#   SUPABASE_SERVICE_ROLE_KEY   Supabase → Project Settings → API → service_role
+#   BACKUP_PASSPHRASE           a long passphrase only you know (12+ chars)
+#
+# The artifact is AES-256-GCM encrypted, so GitHub never sees readable data.
+
+on:
+  schedule:
+    - cron: "0 8 * * *" # 08:00 UTC daily
+  workflow_dispatch: # or run it on demand from the Actions tab
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Create encrypted backup
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: node scripts/backup.mjs
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: greenline-backup-${{ github.run_id }}
+          path: backups/*.json.enc
+          retention-days: 90
+          if-no-files-found: error

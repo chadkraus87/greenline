@@ -14,6 +14,7 @@ export const settingsFromRow = (r: Row): Settings => ({
   bufferFloor: n(r.buffer_floor),
   extraDebtBudget: n(r.extra_debt_budget),
   emergencyMonths: n(r.emergency_months, 3),
+  rolloverBudgets: Boolean(r.rollover_budgets),
 });
 
 export const categoryFromRow = (r: Row): Category => ({ id: s(r.id), name: s(r.name), color: s(r.color), limit: n(r.monthly_limit) });
@@ -58,6 +59,7 @@ export const debtFromRow = (r: Row): Debt => ({
 export const settingsToRow = (v: Settings) => ({
   theme: v.theme, clock24: v.clock24, start_balance: v.startBalance,
   buffer_floor: v.bufferFloor, extra_debt_budget: v.extraDebtBudget, emergency_months: v.emergencyMonths,
+  rollover_budgets: v.rolloverBudgets,
 });
 export const categoryToRow = (c: Category, i = 0) => ({ id: c.id, name: c.name, color: c.color, monthly_limit: c.limit, sort_order: i });
 export const incomeToRow = (v: IncomeSource) => ({ id: v.id, name: v.name, amount: v.amount, frequency: v.frequency, anchor_date: v.anchorDate, received: v.received, tax_rate: v.taxRate ?? 0 });

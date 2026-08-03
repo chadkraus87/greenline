@@ -6,7 +6,7 @@ import * as M from "./mappers";
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: "dark", clock24: false, startBalance: 0,
-  bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 3,
+  bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 3, rolloverBudgets: false,
 };
 
 // Kept for reference/UI ordering; the DB seeds these per user on approval.

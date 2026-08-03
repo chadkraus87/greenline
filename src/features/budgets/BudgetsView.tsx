@@ -4,6 +4,7 @@ import type { Category, MonthModel } from "../../types";
 import { Modal, Field, ViewHeader, Empty, ColorPicker, PALETTE } from "../../components/ui";
 import { money, num, sanitize } from "../../lib/money";
 import { burnPace } from "../../lib/insights";
+import { patchSettings } from "../../db/repo";
 import * as act from "../../db/actions";
 import { useToast } from "../../hooks/useToasts";
 
@@ -44,8 +45,9 @@ export function CategoryForm({ initial, categories, onClose }:
   );
 }
 
-export function BudgetsView({ month, categories, elapsedPct, onAddCategory, onEditCategory }:
-  { month: MonthModel; categories: Category[]; elapsedPct: number; onAddCategory: () => void; onEditCategory: (c: Category) => void }) {
+export function BudgetsView({ month, categories, elapsedPct, rollover, rolloverOn, onAddCategory, onEditCategory }:
+  { month: MonthModel; categories: Category[]; elapsedPct: number; rollover: Record<string, number>; rolloverOn: boolean;
+    onAddCategory: () => void; onEditCategory: (c: Category) => void }) {
   const toast = useToast();
   const pace = burnPace(month, categories, elapsedPct);
 
@@ -77,15 +79,22 @@ export function BudgetsView({ month, categories, elapsedPct, onAddCategory, onEd
         </div>
       )}
 
-      <div style={{ padding: "0 14px 10px" }}>
+      <div style={{ padding: "0 14px 10px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <button className="gl-btn" style={{ fontSize: 12 }} onClick={apply503020}><Wand2 size={13} /> Apply 50/30/20 guide</button>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--dim)", cursor: "pointer" }}
+          title="Envelope budgeting: unspent budget carries into next month">
+          <input type="checkbox" checked={rolloverOn} onChange={(e) => patchSettings({ rolloverBudgets: e.target.checked })} />
+          Roll unspent budget into next month
+        </label>
       </div>
 
       {categories.length === 0 && <Empty text="No categories. Add one to start budgeting." />}
       {categories.map((c) => {
         const spent = month.catSpend[c.id] || 0;
-        const pct = c.limit > 0 ? Math.min(100, (spent / c.limit) * 100) : 0;
-        const over = c.limit > 0 && spent > c.limit;
+        const carry = rolloverOn ? (rollover[c.id] || 0) : 0;
+        const effective = c.limit + carry;
+        const pct = effective > 0 ? Math.min(100, (spent / effective) * 100) : 0;
+        const over = effective > 0 && spent > effective;
         return (
           <div className="gl-row" key={c.id}>
             <span style={{ width: 10, height: 10, borderRadius: 99, background: c.color, flexShrink: 0 }} />
@@ -93,12 +102,17 @@ export function BudgetsView({ month, categories, elapsedPct, onAddCategory, onEd
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5 }}>
                 <span style={{ fontWeight: 500 }}>{c.name}</span>
                 <span className="gl-mono" style={{ color: over ? "var(--clay)" : "var(--dim)" }}>
-                  {money(spent)}{c.limit > 0 ? ` / ${money(c.limit)}` : ""}
+                  {money(spent)}{effective > 0 ? ` / ${money(effective)}` : ""}
                 </span>
               </div>
-              {c.limit > 0 && (
+              {effective > 0 && (
                 <div className="gl-track" style={{ marginTop: 5 }}>
                   <div className="gl-fill" style={{ width: `${pct}%`, background: over ? "var(--clay)" : c.color }} />
+                </div>
+              )}
+              {carry > 0 && (
+                <div style={{ fontSize: 11, color: "var(--fern)", marginTop: 3 }}>
+                  {money(c.limit)} budget + {money(carry)} rolled over
                 </div>
               )}
             </div>

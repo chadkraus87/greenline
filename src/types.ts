@@ -33,6 +33,8 @@ export interface Settings {
   extraDebtBudget: number;
   /** Emergency-fund target in months of average obligations (default 3). */
   emergencyMonths: number;
+  /** Envelope budgeting: unspent category budget carries into next month. */
+  rolloverBudgets: boolean;
 }
 
 export interface AppData {

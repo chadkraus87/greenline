@@ -40,6 +40,7 @@ export const settingsSchema = z.object({
   bufferFloor: amount.default(0),
   extraDebtBudget: amount.default(0),
   emergencyMonths: z.number().min(1).max(24).default(3),
+  rolloverBudgets: z.boolean().default(false),
 });
 
 export const appDataSchema = z.object({

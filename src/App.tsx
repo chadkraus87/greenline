@@ -6,6 +6,7 @@ import {
 import { patchSettings } from "./db/repo";
 import type { Bill, Category, Debt, Expense, Goal, IncomeSource, MonthModel, SinkingFund } from "./types";
 import { computeMonth } from "./lib/forecast";
+import { categoryRollover } from "./lib/insights";
 import { MONTHS } from "./lib/dates";
 import { money } from "./lib/money";
 import { useNow } from "./hooks/useNow";
@@ -55,7 +56,7 @@ export default function App() {
   const [undo, setUndo] = useState<{ label: string; fn: UndoFn } | null>(null);
   const notified = useRef(new Set<string>());
 
-  const settings = data?.settings ?? { theme: "dark" as const, clock24: false, startBalance: 0, bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 3 };
+  const settings = data?.settings ?? { theme: "dark" as const, clock24: false, startBalance: 0, bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 3, rolloverBudgets: false };
   const categories = data?.categories ?? [];
   const incomes = data?.incomes ?? [];
   const bills = data?.bills ?? [];
@@ -72,6 +73,15 @@ export default function App() {
     () => computeMonth({ settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts }, view.y, view.m, now),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts, view.y, view.m, dayStamp]
+  );
+
+  // Envelope carryover — only walked when the setting is on (12-month lookback).
+  const rollover = useMemo(
+    () => (settings.rolloverBudgets && data
+      ? categoryRollover({ settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts }, view.y, view.m, now)
+      : {}),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [settings.rolloverBudgets, data, categories, expenses, bills, view.y, view.m, dayStamp]
   );
 
   // Clock-driven due-today / overdue alerts (once per bill per session)
@@ -247,6 +257,7 @@ export default function App() {
       )}
       {tab === "budgets" && (
         <BudgetsView month={month} categories={categories} elapsedPct={dayProgress}
+          rollover={rollover} rolloverOn={settings.rolloverBudgets}
           onAddCategory={() => setModal({ type: "category" })}
           onEditCategory={(c) => setModal({ type: "category", data: c })} />
       )}

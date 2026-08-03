@@ -71,7 +71,8 @@ create table public.settings (
   start_balance    numeric not null default 0,
   buffer_floor     numeric not null default 0,
   extra_debt_budget numeric not null default 0,
-  emergency_months int     not null default 3
+  emergency_months int     not null default 3,
+  rollover_budgets boolean not null default false
 );
 
 create table public.categories (

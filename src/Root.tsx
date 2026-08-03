@@ -2,6 +2,7 @@ import App from "./App";
 import { useAuth } from "./auth/AuthProvider";
 import { AuthScreen } from "./auth/AuthScreen";
 import { PendingScreen } from "./auth/PendingScreen";
+import { ResetPasswordScreen } from "./auth/ResetPasswordScreen";
 import { isConfigured } from "./lib/supabase";
 
 const Center = ({ children }: { children: React.ReactNode }) => (
@@ -10,11 +11,13 @@ const Center = ({ children }: { children: React.ReactNode }) => (
 
 /** Decides what to show based on auth + approval state. */
 export function Root() {
-  const { session, profile, loading } = useAuth();
+  const { session, profile, loading, recovering } = useAuth();
 
   if (!isConfigured) {
     return <Center>Greenline isn’t configured yet — set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then reload.</Center>;
   }
+  // A recovery session must finish setting a password before anything else.
+  if (session && recovering) return <ResetPasswordScreen />;
   if (loading) return <Center>Loading…</Center>;
   if (!session) return <AuthScreen />;
   if (!profile || profile.status !== "approved") return <PendingScreen />;

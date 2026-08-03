@@ -3,7 +3,7 @@ import { computeMonth } from "./forecast";
 import type { AppData } from "../types";
 
 const base = (): AppData => ({
-  settings: { theme: "dark", clock24: false, startBalance: 500, bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 3 },
+  settings: { theme: "dark", clock24: false, startBalance: 500, bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 3, rolloverBudgets: false },
   categories: [{ id: "housing", name: "Housing", color: "#46B380", limit: 0 }],
   incomes: [{ id: "i1", name: "Pay", amount: 2000, frequency: "monthly", anchorDate: "2026-01-05", received: { "2026-07-05": true } }],
   bills: [{ id: "b1", name: "Rent", amount: 1200, categoryId: "housing", dueDay: 1, priority: "high", paid: {} }],

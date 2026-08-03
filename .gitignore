@@ -8,6 +8,11 @@ dev-dist
 .env.*
 !.env.example
 
+# Backups (encrypted or not, they never belong in git)
+backups
+*.json.enc
+*.decrypted.json
+
 # Build & test artifacts
 tsconfig.tsbuildinfo
 coverage

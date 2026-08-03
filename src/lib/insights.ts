@@ -60,6 +60,28 @@ export function netWorth(data: AppData): NetWorth {
   return { assets, debts, net: round2(assets - debts) };
 }
 
+/**
+ * Envelope budgeting: unspent budget from prior months carries forward.
+ * Sums (limit − spent) over the `lookback` months before (y, m); a month that
+ * ran over eats into the carried balance, and the total floors at 0 so a
+ * blown envelope never turns into a negative allowance.
+ * Note: uses each category's *current* limit for past months — Greenline
+ * doesn't keep limit history, so changing a limit re-bases the carryover.
+ */
+export function categoryRollover(data: AppData, y: number, m: number, today: Date, lookback = 12): Record<string, number> {
+  const out: Record<string, number> = {};
+  const limited = data.categories.filter((c) => c.limit > 0);
+  if (limited.length === 0) return out;
+  const months = Array.from({ length: lookback }, (_, i) => new Date(y, m - lookback + i, 1))
+    .map((d) => computeMonth(data, d.getFullYear(), d.getMonth(), today));
+  for (const c of limited) {
+    let carry = 0;
+    for (const mm of months) carry = Math.max(0, round2(carry + c.limit - (mm.catSpend[c.id] || 0)));
+    out[c.id] = carry;
+  }
+  return out;
+}
+
 export interface BurnPace { id: string; name: string; color: string; limit: number; spent: number; spentPct: number; elapsedPct: number; over: boolean; }
 
 /** Categories tracking to blow their limit given how much of the month has elapsed. */

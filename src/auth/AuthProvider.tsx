@@ -8,10 +8,14 @@ interface AuthState {
   session: Session | null;
   profile: Profile | null;
   loading: boolean;
+  /** True while the user is following a password-recovery link. */
+  recovering: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string) => Promise<{ error: string | null; needsConfirm: boolean }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<{ error: string | null }>;
+  updatePassword: (password: string) => Promise<{ error: string | null }>;
 }
 
 const Ctx = createContext<AuthState | null>(null);
@@ -25,10 +29,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [recovering, setRecovering] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      // Following a reset link signs the user in with a recovery session; hold
+      // them on the "set a new password" screen until they choose one.
+      if (event === "PASSWORD_RECOVERY") setRecovering(true);
+      if (event === "SIGNED_OUT") setRecovering(false);
+      setSession(s);
+    });
     return () => sub.subscription.unsubscribe();
   }, []);
 
@@ -49,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session, fetchProfile]);
 
   const value: AuthState = {
-    session, profile, loading,
+    session, profile, loading, recovering,
     signIn: async (email, password) => {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       return { error: error?.message ?? null };
@@ -60,6 +71,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     signOut: async () => { await supabase.auth.signOut(); },
     refreshProfile: async () => { if (session) setProfile(await fetchProfile(session.user.id)); },
+    sendPasswordReset: async (email) => {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+      return { error: error?.message ?? null };
+    },
+    updatePassword: async (password) => {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (!error) setRecovering(false);
+      return { error: error?.message ?? null };
+    },
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

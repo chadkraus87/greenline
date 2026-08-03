@@ -1,62 +1,101 @@
 # Greenline — Monthly Budget Tracker
 
-Privacy-first, offline-capable monthly budgeting. **All data lives in your browser's IndexedDB — no server, no accounts, no analytics, nothing leaves the device.**
+A private, multi-user monthly budgeting app. Every account's data is isolated at the
+database level, and **new accounts can't see anything until an admin approves them.**
 
 ## Stack
 
-React 18 · TypeScript (strict) · Vite 6 · Dexie (IndexedDB) · Zod · Recharts · vite-plugin-pwa · Vitest · Playwright
+React 18 · TypeScript (strict) · Vite 6 · Supabase (Postgres + Auth + RLS) · Zod · Recharts
+· vite-plugin-pwa · Vitest · Playwright · Fontsource (self-hosted fonts)
 
 ## Quick start
 
 ```bash
 npm install
-npm run dev        # dev server
-npm run build      # typecheck + production build (dist/) with service worker
-npm run preview    # serve the production build
-npm test           # 24 unit/integration tests (Vitest + fake-indexeddb)
-npm run test:e2e   # Playwright smoke tests (requires `npx playwright install` once)
+cp .env.example .env   # fill in your Supabase URL + publishable (anon) key
+npm run dev            # dev server
+npm run build          # typecheck + production build
+npm test               # unit/integration tests (Vitest)
+npm run test:e2e       # Playwright (public tests; see "Testing" below)
 ```
 
 ## Architecture
 
 ```
 src/
-  types.ts            Domain models (Bill, IncomeSource, Expense, Goal, …)
+  types.ts            Domain models (Bill, IncomeSource, Expense, Goal, SinkingFund, Debt, …)
   lib/                Pure logic — no React, fully unit-tested
     occurrences.ts      Income schedule engine (monthly/biweekly/weekly/quarterly/annual/once)
     forecast.ts         computeMonth(): occurrences, totals, daily cash forecast, health score
+    debt.ts             Snowball vs. avalanche payoff simulation
+    insights.ts         History, variance, emergency fund, net worth, burn pace, rollover
+    csv.ts              CSV export (formula-injection safe)
+    backup.ts           AES-256-GCM encrypted backups (WebCrypto, PBKDF2 210k)
     schema.ts           Zod schemas — every import is validated against these
-    backup.ts           AES-256-GCM encrypted backups (WebCrypto, PBKDF2 210k iterations)
-  db/
-    db.ts               Dexie schema (v1; versioned migrations go here)
-    repo.ts             Seeding, settings, atomic export/import/reset
-    actions.ts          All mutations; deletes return undo closures
-  hooks/              useNow (live clock), useToasts
-  components/         Shared UI + the cash-runway ribbon
-  features/           calendar, bills, income, expenses, budgets, goals, reports, backup
+    supabase.ts         Supabase client
+  auth/               AuthProvider, sign-in/up, pending-approval, password reset
+  db/                 repo (load/export/import), actions (all mutations), mappers (row ⇄ model)
+  features/           calendar, bills, income, expenses, budgets, goals, reserves, debt,
+                      reports, backup, admin
+scripts/              backup.mjs / restore.mjs (encrypted off-site backups)
+supabase/migrations/  Schema, RLS policies, triggers
 ```
 
-Data flow: Dexie `useLiveQuery` streams tables into `App`, `computeMonth()` derives the month model (forecast, health, per-category spend), features render it and write back through `db/actions`. No global state library needed — IndexedDB is the source of truth and live queries keep the UI in sync.
+Data flow: `repo.loadAll()` pulls the signed-in user's rows into one `AppData` object,
+`computeMonth()` derives the month model, features render it and write back through
+`db/actions`, and every mutation emits a change that refetches.
 
-## Security & privacy
+## Security model
 
-- CSP meta policy (no inline scripts, self-only connect)
-- Strict TypeScript; Zod validation on every import path — invalid files are rejected atomically, existing data untouched
-- Input length caps + angle-bracket stripping on free-text fields; React escaping everywhere
-- Encrypted backups: AES-256-GCM, key derived with PBKDF2-SHA256 (210,000 iterations); wrong passphrase fails closed
-- No third-party requests except Google Fonts (cached by the service worker; self-host to go fully airgapped)
+- **Row-Level Security on every table** — a row is readable/writable only by its *approved*
+  owner. The gate is in the database, so it can't be bypassed from the browser.
+- **Admin approval**: signing up creates a `pending` profile that can see nothing. An admin
+  approves it, which triggers server-side seeding of that user's default categories.
+- Users have no update policy on their own profile, so no self-escalation to admin.
+- `SECURITY DEFINER` helpers have `EXECUTE` revoked from `anon`/`authenticated` except the
+  two RLS helpers, which only ever reveal the caller's own status.
+- Only the publishable (anon) key ships to the browser. **Never** the service-role key.
+- CSP + HTTP security headers (`vercel.json` / `public/_headers`): frame-deny, HSTS,
+  nosniff, no-referrer, restrictive permissions policy.
+- Zod validation on every import path; CSV export neutralizes spreadsheet formula injection.
 
-## PWA
+## Testing
 
-`vite-plugin-pwa` generates a service worker (precache + font runtime cache) and manifest. Installable, works offline after first load.
+```bash
+npm test          # unit + integration
+npm run test:e2e  # Playwright
+```
 
-## Future expansion
+E2E splits in two. **Public tests** (sign-in surface, validation, wrong-credential
+handling) always run — that's what CI uses. **Authenticated tests** run only when you
+supply a throwaway account, so no credentials ever live in the repo:
 
-The repo/actions split means cloud sync, household sharing, or a Claude-powered assistant slot in behind `db/actions` without touching features. Dexie schema versioning handles data migrations.
+```bash
+E2E_EMAIL=test@example.com E2E_PASSWORD=… npm run test:e2e
+```
 
-## Known deviations from the original brief
+## Backups
 
-- Plain CSS design tokens instead of Tailwind (zero-dependency styling; trivial to swap)
-- Controlled forms + Zod instead of React Hook Form (forms are small; RHF adds weight without benefit here)
-- date-fns not needed — the app's date math is ~10 tested helpers
-- Week/agenda calendar views, drag-and-drop, and CSV export are not yet built
+Supabase Pro takes daily backups. `scripts/backup.mjs` adds an independent copy **you**
+hold, encrypted with AES-256-GCM so no one else can read it:
+
+```bash
+SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… BACKUP_PASSPHRASE=… npm run backup
+BACKUP_PASSPHRASE=… npm run restore backups/greenline-YYYY-MM-DD.json.enc
+```
+
+`.github/workflows/backup.yml` runs this daily and stores the encrypted artifact for 90
+days. It needs three repository secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
+`BACKUP_PASSPHRASE`. **Lose the passphrase and the backup is unrecoverable — that's the point.**
+
+## Budgeting features
+
+Cash-runway forecast · buffer floor · sinking funds for irregular bills · debt payoff
+(snowball vs. avalanche) · savings rate & net worth · emergency-fund target · category
+budgets with rollover (envelope) and burn-rate pacing · 50/30/20 guide · tax set-aside on
+untaxed income · subscription/recurring audit · CSV export · encrypted backups.
+
+## Deployment
+
+Vercel, auto-deploying from `master`. Two environment variables are required:
+`VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
