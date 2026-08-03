@@ -17,20 +17,21 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      # Placeholder config: CI only exercises the UI surface, never a real
+      # backend, so no secrets are needed and forks/clones stay green.
+      # Tests that require a live backend are gated on E2E_LIVE_BACKEND.
       - run: npm run build
         env:
-          # Public, build-time config. The anon key is safe to expose; RLS is
-          # what protects the data. Set these as repository secrets.
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_URL: https://placeholder.supabase.co
+          VITE_SUPABASE_ANON_KEY: placeholder-anon-key
 
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
       - name: Run end-to-end tests
         run: npm run test:e2e
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_URL: https://placeholder.supabase.co
+          VITE_SUPABASE_ANON_KEY: placeholder-anon-key
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

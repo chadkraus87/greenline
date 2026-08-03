@@ -48,6 +48,13 @@ test.describe("public (unauthenticated)", () => {
     await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
   });
 
+});
+
+test.describe("live backend", () => {
+  // Needs a real Supabase project to answer. CI builds against placeholder
+  // config, so this is opt-in: E2E_LIVE_BACKEND=1 npm run test:e2e
+  test.skip(!process.env.E2E_LIVE_BACKEND, "set E2E_LIVE_BACKEND=1 to test against a real Supabase project");
+
   test("wrong credentials show an error and do not sign in", async ({ page }) => {
     await page.goto("/");
     await page.getByLabel("Email").fill("nobody@example.com");

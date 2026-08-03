@@ -66,13 +66,21 @@ npm test          # unit + integration
 npm run test:e2e  # Playwright
 ```
 
-E2E splits in two. **Public tests** (sign-in surface, validation, wrong-credential
-handling) always run — that's what CI uses. **Authenticated tests** run only when you
-supply a throwaway account, so no credentials ever live in the repo:
+E2E is split into three tiers so CI needs no secrets and any clone stays green:
+
+| Tier | Runs when | Covers |
+|---|---|---|
+| **public** | always | sign-in surface, mode switching, client-side validation |
+| **live backend** | `E2E_LIVE_BACKEND=1` | real Supabase rejects bad credentials |
+| **authenticated** | `E2E_EMAIL` + `E2E_PASSWORD` | dashboard, every tab, bill CRUD, sign-out |
 
 ```bash
-E2E_EMAIL=test@example.com E2E_PASSWORD=… npm run test:e2e
+# everything, against your real project + a throwaway test account
+E2E_LIVE_BACKEND=1 E2E_EMAIL=test@example.com E2E_PASSWORD=… npm run test:e2e
 ```
+
+CI builds with placeholder Supabase config, so only the public tier runs there — no
+credentials ever live in the repo.
 
 ## Backups
 
