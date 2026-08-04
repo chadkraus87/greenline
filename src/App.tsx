@@ -23,6 +23,7 @@ import { BillForm, BillsView } from "./features/bills/BillsFeature";
 import { IncomeForm, IncomeView } from "./features/income/IncomeFeature";
 import { ExpenseForm, ExpensesView } from "./features/expenses/ExpensesFeature";
 import { ReceiptScanner, type ReceiptPrefill } from "./features/expenses/ReceiptScanner";
+import { ImportModal } from "./features/expenses/ImportModal";
 import { BudgetsView, CategoryForm } from "./features/budgets/BudgetsView";
 import { GoalForm, GoalsView } from "./features/goals/GoalsFeature";
 import { DebtForm, DebtsView } from "./features/debts/DebtsFeature";
@@ -37,7 +38,7 @@ type ModalState =
   | { type: "event"; date?: string } | { type: "day"; date: string }
   | { type: "debt"; data?: Debt } | { type: "sinking"; data?: SinkingFund }
   | { type: "category"; data?: Category }
-  | { type: "backup" } | { type: "admin" } | { type: "sharing" } | null;
+  | { type: "backup" } | { type: "admin" } | { type: "sharing" } | { type: "import" } | null;
 
 const TABS = [
   ["overview", "Overview", LayoutDashboard], ["bills", "Bills", Receipt],
@@ -277,6 +278,7 @@ export default function App() {
           onAdd={() => setModal({ type: "expense", date: defaultExpenseDate })}
           onEdit={(e) => setModal({ type: "expense", data: e })}
           onScanned={(p) => setModal({ type: "expense", prefill: p, date: p.date || defaultExpenseDate })}
+          onImport={() => setModal({ type: "import" })}
           onUndoable={onUndoable} />
       )}
       {tab === "budgets" && (
@@ -328,6 +330,7 @@ export default function App() {
       {modal?.type === "backup" && <BackupModal onClose={() => setModal(null)} />}
       {modal?.type === "admin" && <AdminPanel onClose={() => setModal(null)} />}
       {modal?.type === "sharing" && <SharingModal onClose={() => setModal(null)} />}
+      {modal?.type === "import" && <ImportModal categories={categories} existing={expenses} onClose={() => setModal(null)} />}
 
       {undo && (
         <div className="gl-toast" style={{ bottom: 70 }}>

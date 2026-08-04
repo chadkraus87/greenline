@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pencil, Trash2, ScanLine } from "lucide-react";
+import { Pencil, Trash2, ScanLine, Upload } from "lucide-react";
 import type { Category, Expense, MonthModel } from "../../types";
 import { Modal, Field, FormActions, ViewHeader, Empty } from "../../components/ui";
 import { money, num, sanitize } from "../../lib/money";
@@ -58,17 +58,20 @@ export function ExpenseForm({ initial, categories, defaultDate, prefill, onClose
   );
 }
 
-export function ExpensesView({ month, categories, search, onAdd, onEdit, onScanned, onUndoable }:
+export function ExpensesView({ month, categories, search, onAdd, onEdit, onScanned, onImport, onUndoable }:
   { month: MonthModel; categories: Category[]; search: string; onAdd: () => void; onEdit: (e: Expense) => void;
-    onScanned: (p: ReceiptPrefill) => void; onUndoable: (label: string, undo: act.UndoFn | null) => void }) {
+    onScanned: (p: ReceiptPrefill) => void; onImport: () => void; onUndoable: (label: string, undo: act.UndoFn | null) => void }) {
   const list = month.expenses
     .filter((e) => `${e.title} ${e.merchant ?? ""} ${e.notes ?? ""}`.toLowerCase().includes(search))
     .sort((a, b) => b.date.localeCompare(a.date));
   return (
     <div className="gl-card">
       <ViewHeader title="Expenses" sub={`${money(month.expensesTotal)} in day-to-day spending this month`} onAdd={onAdd} addLabel="Add expense" />
-      <div style={{ padding: "0 14px 10px" }}>
+      <div style={{ padding: "0 14px 10px", display: "flex", gap: 8, flexWrap: "wrap" }}>
         <ReceiptScanner categories={categories} onScanned={onScanned} style={{ fontSize: 12 }} />
+        <button className="gl-btn" style={{ fontSize: 12 }} onClick={onImport}>
+          <Upload size={13} /> Import bank CSV
+        </button>
       </div>
       {list.length === 0 && <Empty text="No expenses logged this month." />}
       {list.length > 0 && (

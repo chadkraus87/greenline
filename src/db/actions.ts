@@ -78,6 +78,24 @@ export const saveExpense = async (f: Omit<Expense, "id"> & { id?: string }) => {
   done();
 };
 
+/** Bulk insert from a CSV import. Chunked so a large statement can't time out. */
+export const bulkAddExpenses = async (items: Omit<Expense, "id">[]): Promise<number> => {
+  if (items.length === 0) return 0;
+  const rows = items.map((f) => ({
+    title: f.title, amount: f.amount, category_id: f.categoryId || null,
+    date: f.date, merchant: f.merchant ?? null, notes: f.notes ?? null,
+  }));
+  const CHUNK = 250;
+  let inserted = 0;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const { error } = await table("expenses").insert(rows.slice(i, i + CHUNK));
+    if (error) throw error;
+    inserted += Math.min(CHUNK, rows.length - i);
+  }
+  done();
+  return inserted;
+};
+
 // --- Receipt scanning ---
 /** Uploads to the caller's own folder; storage RLS rejects any other prefix. */
 export const uploadReceipt = async (file: File): Promise<string> => {

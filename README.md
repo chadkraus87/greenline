@@ -120,6 +120,20 @@ supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 
 Roughly 1–2¢ per receipt. Capped at 40 scans/user/hour.
 
+## Bank / card CSV import
+
+Expenses tab → **Import bank CSV**. Works with any bank: the parser handles quoted fields,
+`$1,234.56`, accounting negatives `(12.34)`, European decimals, and several date formats,
+then guesses which column is which — single signed `Amount`, or split `Debit`/`Credit`.
+You confirm the mapping and review every row before anything is written.
+
+- Money **in** (deposits, refunds) is detected and excluded by default
+- Transactions you've already recorded are flagged and unticked
+- Repeats within the same file are caught too
+- Unreadable rows stay visible with a reason rather than disappearing silently
+
+`docs/sample-bank-export.csv` is a realistic file for trying it out.
+
 ## Calendar sharing
 
 Share **calendar events** with another account: invite by email, pick view-only or
