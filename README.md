@@ -49,6 +49,15 @@ Data flow: `repo.loadAll()` pulls the signed-in user's rows into one `AppData` o
 
 - **Row-Level Security on every table** — a row is readable/writable only by its *approved*
   owner. The gate is in the database, so it can't be bypassed from the browser.
+- **Calendar sharing is the one deliberate exception, and it covers events only.**
+  Bills, income, expenses, goals, sinking funds, and debts are never shared —
+  their policies are owner-only, full stop. A share requires the owner to invite
+  and the recipient to accept; the owner alone sets read vs. read/write, enforced
+  by a trigger so a recipient can't promote themselves.
+- **Receipts** are stored in a private bucket under `<user_id>/…`, with every storage
+  policy checking that prefix against `auth.uid()`. The Anthropic key lives only in the
+  `scan-receipt` Edge Function, never in the browser, and scans are throttled per user
+  by a table the client cannot read, write, or clear.
 - **Admin approval**: signing up creates a `pending` profile that can see nothing. An admin
   approves it, which triggers server-side seeding of that user's default categories.
 - Users have no update policy on their own profile, so no self-escalation to admin.
@@ -95,6 +104,27 @@ BACKUP_PASSPHRASE=… npm run restore backups/greenline-YYYY-MM-DD.json.enc
 `.github/workflows/backup.yml` runs this daily and stores the encrypted artifact for 90
 days. It needs three repository secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
 `BACKUP_PASSPHRASE`. **Lose the passphrase and the backup is unrecoverable — that's the point.**
+
+## Receipt scanning
+
+Snap a receipt → it uploads to private storage → the `scan-receipt` Edge Function asks
+Claude to extract merchant, date, total, tax, and a category → the expense form opens
+**pre-filled for you to confirm**. Nothing is ever saved automatically; OCR misreads
+totals often enough that silent entry would quietly corrupt the ledger.
+
+Requires one secret on the Supabase project (Dashboard → Edge Functions → Secrets):
+
+```bash
+supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Roughly 1–2¢ per receipt. Capped at 40 scans/user/hour.
+
+## Calendar sharing
+
+Share **calendar events** with another account: invite by email, pick view-only or
+view & edit, and they must accept. Financial data is never included. Manage it from the
+share icon in the header; either side can end a share at any time.
 
 ## Budgeting features
 

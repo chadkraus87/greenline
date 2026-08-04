@@ -16,9 +16,31 @@ export interface Bill {
 export interface Expense {
   id: string; title: string; amount: number; categoryId: string; date: string;
   merchant?: string; notes?: string;
+  /** Storage path of the scanned receipt image, if this expense came from one. */
+  receiptPath?: string;
+}
+
+/** Fields extracted from a receipt photo — always reviewed by a human before saving. */
+export interface ScannedReceipt {
+  merchant: string; date: string; total: number; tax: number;
+  categoryHint: string; confidence: "high" | "medium" | "low";
+  lineItems: { description: string; amount: number }[];
 }
 export interface Goal { id: string; name: string; target: number; saved: number; monthly: number; color: string; }
-export interface CalEvent { id: string; title: string; date: string; notes?: string; color: string; }
+export interface CalEvent {
+  id: string; title: string; date: string; notes?: string; color: string;
+  /** Owner of the event. Differs from the signed-in user for shared calendars. */
+  ownerId?: string;
+}
+
+export type SharePermission = "read" | "write";
+export type ShareStatus = "pending" | "accepted" | "declined" | "revoked";
+/** A calendar-sharing link. `outgoing` = I own the calendar; `incoming` = shared with me. */
+export interface CalendarShare {
+  id: string; direction: "outgoing" | "incoming";
+  otherId: string; otherEmail: string;
+  permission: SharePermission; status: ShareStatus; createdAt: string;
+}
 /** A recurring irregular expense (insurance, taxes, registration) saved for monthly. */
 export interface SinkingFund {
   id: string; name: string; total: number; cadenceMonths: number;

@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3, Check, ChevronLeft, ChevronRight, CircleDollarSign, DatabaseBackup, Landmark,
-  LayoutDashboard, LogOut, Moon, PiggyBank, Plus, Receipt, Search, ShieldCheck, Sun, Umbrella, Undo2, Wallet, X,
+  LayoutDashboard, LogOut, Moon, PiggyBank, Plus, Receipt, Search, Share2, ShieldCheck, Sun, Umbrella, Undo2, Wallet, X,
 } from "lucide-react";
 import { patchSettings } from "./db/repo";
 import type { Bill, Category, Debt, Expense, Goal, IncomeSource, MonthModel, SinkingFund } from "./types";
@@ -12,14 +12,17 @@ import { money } from "./lib/money";
 import { useNow } from "./hooks/useNow";
 import { useToast } from "./hooks/useToasts";
 import { useAppData } from "./hooks/useAppData";
+import { useShares } from "./hooks/useShares";
 import { useAuth } from "./auth/AuthProvider";
 import { AdminPanel } from "./features/admin/AdminPanel";
+import { SharingModal } from "./features/sharing/SharingModal";
 import { LiveClock, Stat, ViewHeader, Empty } from "./components/ui";
 import { Runway } from "./components/Runway";
 import { Calendar, DayDetail, EventForm } from "./features/calendar/CalendarFeature";
 import { BillForm, BillsView } from "./features/bills/BillsFeature";
 import { IncomeForm, IncomeView } from "./features/income/IncomeFeature";
 import { ExpenseForm, ExpensesView } from "./features/expenses/ExpensesFeature";
+import { ReceiptScanner, type ReceiptPrefill } from "./features/expenses/ReceiptScanner";
 import { BudgetsView, CategoryForm } from "./features/budgets/BudgetsView";
 import { GoalForm, GoalsView } from "./features/goals/GoalsFeature";
 import { DebtForm, DebtsView } from "./features/debts/DebtsFeature";
@@ -30,11 +33,11 @@ import { toggleBillPaid, type UndoFn } from "./db/actions";
 
 type ModalState =
   | { type: "bill"; data?: Bill } | { type: "income"; data?: IncomeSource }
-  | { type: "expense"; data?: Expense; date?: string } | { type: "goal"; data?: Goal }
+  | { type: "expense"; data?: Expense; date?: string; prefill?: ReceiptPrefill } | { type: "goal"; data?: Goal }
   | { type: "event"; date?: string } | { type: "day"; date: string }
   | { type: "debt"; data?: Debt } | { type: "sinking"; data?: SinkingFund }
   | { type: "category"; data?: Category }
-  | { type: "backup" } | { type: "admin" } | null;
+  | { type: "backup" } | { type: "admin" } | { type: "sharing" } | null;
 
 const TABS = [
   ["overview", "Overview", LayoutDashboard], ["bills", "Bills", Receipt],
@@ -47,8 +50,15 @@ type Tab = (typeof TABS)[number][0];
 export default function App() {
   const toast = useToast();
   const now = useNow();
-  const { profile, signOut } = useAuth();
+  const { profile, session, signOut } = useAuth();
   const { data, loading } = useAppData();
+  const { shares } = useShares();
+  const myId = session?.user.id;
+  // Calendars other people have shared with me, and which of those I may edit.
+  const sharedIn = shares.filter((s) => s.direction === "incoming" && s.status === "accepted");
+  const writableCalendars = sharedIn.filter((s) => s.permission === "write").map((s) => ({ id: s.otherId, email: s.otherEmail }));
+  const ownerEmailById = new Map(sharedIn.map((s) => [s.otherId, s.otherEmail]));
+  const pendingInvites = shares.filter((s) => s.direction === "incoming" && s.status === "pending").length;
   const [view, setView] = useState(() => ({ y: new Date().getFullYear(), m: new Date().getMonth() }));
   const [tab, setTab] = useState<Tab>("overview");
   const [modal, setModal] = useState<ModalState>(null);
@@ -128,6 +138,16 @@ export default function App() {
             onClick={() => patchSettings({ theme: settings.theme === "dark" ? "light" : "dark" })}>
             {settings.theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
           </button>
+          <button className="gl-icon-btn" style={{ position: "relative" }}
+            aria-label={pendingInvites > 0 ? `Calendar sharing, ${pendingInvites} pending invitation(s)` : "Calendar sharing"}
+            title="Calendar sharing" onClick={() => setModal({ type: "sharing" })}>
+            <Share2 size={15} />
+            {pendingInvites > 0 && (
+              <span style={{ position: "absolute", top: -3, right: -3, minWidth: 15, height: 15, borderRadius: 99,
+                background: "var(--brass)", color: "#fff", fontSize: 9.5, fontWeight: 700,
+                display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>{pendingInvites}</span>
+            )}
+          </button>
           <button className="gl-icon-btn" aria-label="Backups" title="Backups" onClick={() => setModal({ type: "backup" })}><DatabaseBackup size={15} /></button>
           {profile?.role === "admin" && (
             <button className="gl-icon-btn" aria-label="Admin — manage users" title="Admin — manage users" onClick={() => setModal({ type: "admin" })}><ShieldCheck size={15} /></button>
@@ -193,7 +213,7 @@ export default function App() {
 
       {tab === "overview" && (
         <div className="gl-grid-main">
-          <Calendar y={view.y} m={view.m} month={month} onDayClick={(ds) => setModal({ type: "day", date: ds })} />
+          <Calendar y={view.y} m={view.m} month={month} myId={myId} onDayClick={(ds) => setModal({ type: "day", date: ds })} />
           <div style={{ display: "grid", gap: 14 }}>
             <div className="gl-card">
               <ViewHeader title="Up next" sub="Unpaid bills this month" />
@@ -225,6 +245,8 @@ export default function App() {
               </p>
               <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
                 <button className="gl-btn primary" style={{ fontSize: 12 }} onClick={() => setModal({ type: "expense", date: defaultExpenseDate })}><Plus size={13} /> Expense</button>
+                <ReceiptScanner categories={categories} style={{ fontSize: 12 }}
+                  onScanned={(p) => setModal({ type: "expense", prefill: p, date: p.date || defaultExpenseDate })} />
                 <button className="gl-btn" style={{ fontSize: 12 }} onClick={() => setModal({ type: "bill" })}><Plus size={13} /> Bill</button>
                 <button className="gl-btn" style={{ fontSize: 12 }} onClick={() => setModal({ type: "income" })}><Plus size={13} /> Income</button>
               </div>
@@ -253,7 +275,9 @@ export default function App() {
       {tab === "expenses" && (
         <ExpensesView month={month} categories={categories} search={q}
           onAdd={() => setModal({ type: "expense", date: defaultExpenseDate })}
-          onEdit={(e) => setModal({ type: "expense", data: e })} onUndoable={onUndoable} />
+          onEdit={(e) => setModal({ type: "expense", data: e })}
+          onScanned={(p) => setModal({ type: "expense", prefill: p, date: p.date || defaultExpenseDate })}
+          onUndoable={onUndoable} />
       )}
       {tab === "budgets" && (
         <BudgetsView month={month} categories={categories} elapsedPct={dayProgress}
@@ -289,20 +313,21 @@ export default function App() {
 
       {modal?.type === "bill" && <BillForm initial={modal.data} categories={categories} onClose={() => setModal(null)} />}
       {modal?.type === "income" && <IncomeForm initial={modal.data} defaultDate={month.todayYmd} onClose={() => setModal(null)} />}
-      {modal?.type === "expense" && <ExpenseForm initial={modal.data} defaultDate={modal.date ?? defaultExpenseDate} categories={categories} onClose={() => setModal(null)} />}
+      {modal?.type === "expense" && <ExpenseForm initial={modal.data} defaultDate={modal.date ?? defaultExpenseDate} categories={categories} prefill={modal.prefill} onClose={() => setModal(null)} />}
       {modal?.type === "goal" && <GoalForm initial={modal.data} onClose={() => setModal(null)} />}
       {modal?.type === "debt" && <DebtForm initial={modal.data} onClose={() => setModal(null)} />}
       {modal?.type === "sinking" && <SinkingFundForm initial={modal.data} categories={categories} defaultDate={defaultExpenseDate} onClose={() => setModal(null)} />}
       {modal?.type === "category" && <CategoryForm initial={modal.data} categories={categories} onClose={() => setModal(null)} />}
-      {modal?.type === "event" && <EventForm defaultDate={modal.date ?? month.todayYmd} onClose={() => setModal(null)} />}
+      {modal?.type === "event" && <EventForm defaultDate={modal.date ?? month.todayYmd} writableCalendars={writableCalendars} onClose={() => setModal(null)} />}
       {modal?.type === "day" && (
-        <DayDetail date={modal.date} month={month} onClose={() => setModal(null)}
+        <DayDetail date={modal.date} month={month} myId={myId} ownerEmailById={ownerEmailById} onClose={() => setModal(null)}
           onAddExpense={(d) => setModal({ type: "expense", date: d })}
           onAddEvent={(d) => setModal({ type: "event", date: d })}
           onEditExpense={(e) => setModal({ type: "expense", data: e })} />
       )}
       {modal?.type === "backup" && <BackupModal onClose={() => setModal(null)} />}
       {modal?.type === "admin" && <AdminPanel onClose={() => setModal(null)} />}
+      {modal?.type === "sharing" && <SharingModal onClose={() => setModal(null)} />}
 
       {undo && (
         <div className="gl-toast" style={{ bottom: 70 }}>

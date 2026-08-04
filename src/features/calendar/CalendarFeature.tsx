@@ -8,18 +8,22 @@ import * as act from "../../db/actions";
 import { useToast } from "../../hooks/useToasts";
 import { PALETTE } from "../../components/ui";
 
-interface ChipItem { label: string; color: string; soft: string; done?: boolean; }
+interface ChipItem { label: string; color: string; soft: string; done?: boolean; shared?: boolean; }
 
-function itemsFor(month: MonthModel, ds: string): ChipItem[] {
+/** `myId` distinguishes your own events from ones on a shared calendar. */
+function itemsFor(month: MonthModel, ds: string, myId?: string): ChipItem[] {
   return [
     ...month.incomeOccs.filter((o) => o.date === ds).map((o) => ({ label: `+ ${o.name}`, color: "var(--fern)", soft: "var(--fern-soft)", done: o.received })),
     ...month.billOccs.filter((b) => b.date === ds).map((b) => ({ label: b.name, color: b.overdue ? "var(--clay)" : "var(--brass)", soft: b.overdue ? "var(--clay-soft)" : "var(--brass-soft)", done: b.isPaid })),
     ...month.expenses.filter((e) => e.date === ds).map((e) => ({ label: e.title, color: "var(--sky)", soft: "var(--sky-soft)" })),
-    ...month.events.filter((e) => e.date === ds).map((e) => ({ label: e.title, color: e.color, soft: "transparent" })),
+    ...month.events.filter((e) => e.date === ds).map((e) => ({
+      label: e.title, color: e.color, soft: "transparent",
+      shared: Boolean(myId && e.ownerId && e.ownerId !== myId),
+    })),
   ];
 }
 
-export function Calendar({ y, m, month, onDayClick }: { y: number; m: number; month: MonthModel; onDayClick: (ds: string) => void }) {
+export function Calendar({ y, m, month, myId, onDayClick }: { y: number; m: number; month: MonthModel; myId?: string; onDayClick: (ds: string) => void }) {
   const firstDow = new Date(y, m, 1).getDay();
   const cells: (number | null)[] = [...Array<null>(firstDow).fill(null)];
   for (let d = 1; d <= month.nDays; d++) cells.push(d);
@@ -34,13 +38,17 @@ export function Calendar({ y, m, month, onDayClick }: { y: number; m: number; mo
         {cells.map((d, i) => {
           if (d === null) return <div key={`x${i}`} />;
           const ds = `${month.ym}-${pad(d)}`;
-          const items = itemsFor(month, ds);
+          const items = itemsFor(month, ds, myId);
           const isToday = month.inMonth && ds === month.todayYmd;
           return (
             <button key={d} className={"gl-day" + (isToday ? " today" : "")} onClick={() => onDayClick(ds)} aria-label={`${ds}, ${items.length} items`}>
               <div className="gl-mono" style={{ fontSize: 12, fontWeight: 600, color: isToday ? "var(--fern)" : "var(--dim)" }}>{d}</div>
               {items.slice(0, 3).map((it, j) => (
-                <span key={j} className="gl-chip" style={{ background: it.soft, color: it.color, textDecoration: it.done ? "line-through" : "none", opacity: it.done ? 0.6 : 1 }}>{it.label}</span>
+                <span key={j} className="gl-chip" title={it.shared ? "Shared calendar" : undefined}
+                  style={{ background: it.soft, color: it.color, textDecoration: it.done ? "line-through" : "none",
+                    opacity: it.done ? 0.6 : 1, ...(it.shared ? { borderLeft: "2px solid var(--sky)", paddingLeft: 4 } : {}) }}>
+                  {it.shared ? "◹ " : ""}{it.label}
+                </span>
               ))}
               {items.length > 3 && <span className="gl-chip" style={{ color: "var(--dim)" }}>+{items.length - 3} more</span>}
               <div className="gl-dotrow">
@@ -54,11 +62,20 @@ export function Calendar({ y, m, month, onDayClick }: { y: number; m: number; mo
   );
 }
 
-export function EventForm({ initial, defaultDate, onClose }: { initial?: CalEvent; defaultDate: string; onClose: () => void }) {
+export function EventForm({ initial, defaultDate, writableCalendars = [], onClose }:
+  { initial?: CalEvent; defaultDate: string; writableCalendars?: { id: string; email: string }[]; onClose: () => void }) {
   const toast = useToast();
-  const [f, setF] = useState({ title: initial?.title ?? "", date: initial?.date ?? defaultDate, notes: initial?.notes ?? "", color: initial?.color ?? PALETTE[3] });
+  const [f, setF] = useState({
+    title: initial?.title ?? "", date: initial?.date ?? defaultDate,
+    notes: initial?.notes ?? "", color: initial?.color ?? PALETTE[3],
+    ownerId: "", // "" = my own calendar
+  });
   const save = async () => {
-    await act.saveEvent({ id: initial?.id, title: sanitize(f.title), date: f.date, notes: sanitize(f.notes), color: f.color });
+    await act.saveEvent({
+      id: initial?.id, title: sanitize(f.title), date: f.date,
+      notes: sanitize(f.notes), color: f.color,
+      ownerId: f.ownerId || undefined,
+    });
     toast("Event saved");
     onClose();
   };
@@ -66,14 +83,23 @@ export function EventForm({ initial, defaultDate, onClose }: { initial?: CalEven
     <Modal title={initial ? "Edit event" : "Add calendar event"} onClose={onClose}>
       <Field label="Title"><input className="gl-input" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} autoFocus /></Field>
       <Field label="Date"><input className="gl-input" type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
+      {!initial && writableCalendars.length > 0 && (
+        <Field label="Add to calendar">
+          <select className="gl-select" value={f.ownerId} onChange={(e) => setF({ ...f, ownerId: e.target.value })}>
+            <option value="">My calendar</option>
+            {writableCalendars.map((c) => <option key={c.id} value={c.id}>{c.email}</option>)}
+          </select>
+        </Field>
+      )}
       <Field label="Notes"><input className="gl-input" value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></Field>
       <FormActions onCancel={onClose} onSave={save} saveLabel={initial ? "Save changes" : "Add event"} disabled={!f.title.trim() || !f.date} />
     </Modal>
   );
 }
 
-export function DayDetail({ date, month, onClose, onAddExpense, onAddEvent, onEditExpense }:
-  { date: string; month: MonthModel; onClose: () => void; onAddExpense: (d: string) => void; onAddEvent: (d: string) => void; onEditExpense: (e: Expense) => void }) {
+export function DayDetail({ date, month, myId, ownerEmailById, onClose, onAddExpense, onAddEvent, onEditExpense }:
+  { date: string; month: MonthModel; myId?: string; ownerEmailById?: Map<string, string>;
+    onClose: () => void; onAddExpense: (d: string) => void; onAddEvent: (d: string) => void; onEditExpense: (e: Expense) => void }) {
   const d = parseYmd(date);
   const incs = month.incomeOccs.filter((o) => o.date === date);
   const bills = month.billOccs.filter((b) => b.date === date);
@@ -111,13 +137,23 @@ export function DayDetail({ date, month, onClose, onAddExpense, onAddEvent, onEd
           <button className="gl-icon-btn" onClick={() => onEditExpense(e)} aria-label="Edit expense"><Pencil size={13} /></button>
         </div>
       ))}
-      {evs.map((e) => (
-        <div key={e.id} className="gl-row" style={{ padding: "9px 0" }}>
-          <CalendarDays size={15} color={e.color} />
-          <span style={{ flex: 1 }}>{e.title}</span>
-          <button className="gl-icon-btn" onClick={() => act.deleteEvent(e.id)} aria-label="Delete event"><Trash2 size={13} /></button>
-        </div>
-      ))}
+      {evs.map((e) => {
+        const shared = Boolean(myId && e.ownerId && e.ownerId !== myId);
+        return (
+          <div key={e.id} className="gl-row" style={{ padding: "9px 0" }}>
+            <CalendarDays size={15} color={e.color} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {e.title}
+              {shared && (
+                <div style={{ fontSize: 11, color: "var(--sky)" }}>
+                  shared · {ownerEmailById?.get(e.ownerId!) ?? "another calendar"}
+                </div>
+              )}
+            </div>
+            <button className="gl-icon-btn" onClick={() => act.deleteEvent(e.id)} aria-label="Delete event"><Trash2 size={13} /></button>
+          </div>
+        );
+      })}
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
         <button className="gl-btn primary" onClick={() => onAddExpense(date)}><Plus size={14} /> Expense</button>
         <button className="gl-btn" onClick={() => onAddEvent(date)}><Plus size={14} /> Event</button>

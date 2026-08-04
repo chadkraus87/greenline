@@ -35,6 +35,7 @@ export const expenseFromRow = (r: Row): Expense => ({
   id: s(r.id), title: s(r.title), amount: n(r.amount), categoryId: s(r.category_id),
   date: s(r.date), merchant: r.merchant == null ? undefined : s(r.merchant),
   notes: r.notes == null ? undefined : s(r.notes),
+  receiptPath: r.receipt_path == null ? undefined : s(r.receipt_path),
 });
 
 export const goalFromRow = (r: Row): Goal => ({
@@ -43,6 +44,7 @@ export const goalFromRow = (r: Row): Goal => ({
 
 export const eventFromRow = (r: Row): CalEvent => ({
   id: s(r.id), title: s(r.title), date: s(r.date), notes: r.notes == null ? undefined : s(r.notes), color: s(r.color),
+  ownerId: r.user_id == null ? undefined : s(r.user_id),
 });
 
 export const sinkingFromRow = (r: Row): SinkingFund => ({

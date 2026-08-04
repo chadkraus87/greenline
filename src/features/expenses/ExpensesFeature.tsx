@@ -1,29 +1,44 @@
 import { useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, ScanLine } from "lucide-react";
 import type { Category, Expense, MonthModel } from "../../types";
 import { Modal, Field, FormActions, ViewHeader, Empty } from "../../components/ui";
 import { money, num, sanitize } from "../../lib/money";
 import * as act from "../../db/actions";
 import { useToast } from "../../hooks/useToasts";
+import { ReceiptScanner, type ReceiptPrefill } from "./ReceiptScanner";
 
-export function ExpenseForm({ initial, categories, defaultDate, onClose }:
-  { initial?: Expense; categories: Category[]; defaultDate: string; onClose: () => void }) {
+export function ExpenseForm({ initial, categories, defaultDate, prefill, onClose }:
+  { initial?: Expense; categories: Category[]; defaultDate: string; prefill?: ReceiptPrefill; onClose: () => void }) {
   const toast = useToast();
   const [f, setF] = useState({
-    title: initial?.title ?? "", amount: initial?.amount?.toString() ?? "",
-    categoryId: initial?.categoryId ?? categories[0]?.id ?? "misc",
-    date: initial?.date ?? defaultDate, merchant: initial?.merchant ?? "", notes: initial?.notes ?? "",
+    title: prefill?.title ?? initial?.title ?? "",
+    amount: prefill?.amount ?? initial?.amount?.toString() ?? "",
+    categoryId: prefill?.categoryId || initial?.categoryId || categories[0]?.id || "misc",
+    date: prefill?.date || initial?.date || defaultDate,
+    merchant: prefill?.merchant ?? initial?.merchant ?? "",
+    notes: initial?.notes ?? "",
   });
+  const receiptPath = prefill?.receiptPath ?? initial?.receiptPath;
   const save = async () => {
     await act.saveExpense({
       id: initial?.id, title: sanitize(f.title), amount: num(f.amount),
       categoryId: f.categoryId, date: f.date, merchant: sanitize(f.merchant), notes: sanitize(f.notes),
+      receiptPath,
     });
     toast(initial ? "Expense updated" : "Expense added");
     onClose();
   };
   return (
-    <Modal title={initial ? "Edit expense" : "Add expense"} onClose={onClose}>
+    <Modal title={initial ? "Edit expense" : prefill ? "Confirm scanned receipt" : "Add expense"} onClose={onClose}>
+      {prefill && (
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 12px", borderRadius: 9,
+          background: prefill.confidence === "high" ? "var(--fern-soft)" : "var(--brass-soft)", marginTop: 6, marginBottom: 4 }}>
+          <ScanLine size={15} color={prefill.confidence === "high" ? "var(--fern)" : "var(--brass)"} style={{ flexShrink: 0, marginTop: 1 }} />
+          <div style={{ fontSize: 12.5 }}>
+            Read from your receipt ({prefill.confidence} confidence). <strong>Check the amount and date</strong> before saving — scanning isn't perfect.
+          </div>
+        </div>
+      )}
       <Field label="Title"><input className="gl-input" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="Groceries, gas, coffee…" autoFocus /></Field>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <Field label="Amount"><input className="gl-input gl-mono" type="number" min="0" step="0.01" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} /></Field>
@@ -43,14 +58,18 @@ export function ExpenseForm({ initial, categories, defaultDate, onClose }:
   );
 }
 
-export function ExpensesView({ month, categories, search, onAdd, onEdit, onUndoable }:
-  { month: MonthModel; categories: Category[]; search: string; onAdd: () => void; onEdit: (e: Expense) => void; onUndoable: (label: string, undo: act.UndoFn | null) => void }) {
+export function ExpensesView({ month, categories, search, onAdd, onEdit, onScanned, onUndoable }:
+  { month: MonthModel; categories: Category[]; search: string; onAdd: () => void; onEdit: (e: Expense) => void;
+    onScanned: (p: ReceiptPrefill) => void; onUndoable: (label: string, undo: act.UndoFn | null) => void }) {
   const list = month.expenses
     .filter((e) => `${e.title} ${e.merchant ?? ""} ${e.notes ?? ""}`.toLowerCase().includes(search))
     .sort((a, b) => b.date.localeCompare(a.date));
   return (
     <div className="gl-card">
       <ViewHeader title="Expenses" sub={`${money(month.expensesTotal)} in day-to-day spending this month`} onAdd={onAdd} addLabel="Add expense" />
+      <div style={{ padding: "0 14px 10px" }}>
+        <ReceiptScanner categories={categories} onScanned={onScanned} style={{ fontSize: 12 }} />
+      </div>
       {list.length === 0 && <Empty text="No expenses logged this month." />}
       {list.length > 0 && (
         <div style={{ overflowX: "auto" }}>
@@ -62,7 +81,10 @@ export function ExpensesView({ month, categories, search, onAdd, onEdit, onUndoa
                 return (
                   <tr key={e.id}>
                     <td className="gl-mono" style={{ color: "var(--dim)" }}>{e.date.slice(5)}</td>
-                    <td>{e.title}{e.merchant ? <span style={{ color: "var(--dim)" }}> · {e.merchant}</span> : ""}</td>
+                    <td>
+                      {e.title}{e.merchant ? <span style={{ color: "var(--dim)" }}> · {e.merchant}</span> : ""}
+                      {e.receiptPath && <ScanLine size={11} style={{ marginLeft: 5, verticalAlign: "middle", color: "var(--dim)" }} aria-label="Has receipt" />}
+                    </td>
                     <td>
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
                         <span style={{ width: 8, height: 8, borderRadius: 99, background: cat?.color ?? "var(--dim)" }} />{cat?.name ?? "—"}

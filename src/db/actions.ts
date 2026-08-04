@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import type { Bill, CalEvent, Category, Debt, Expense, Goal, IncomeSource, SinkingFund } from "../types";
+import type { Bill, CalendarShare, CalEvent, Category, Debt, Expense, Goal, IncomeSource, ScannedReceipt, SharePermission, SinkingFund } from "../types";
 import { round2 } from "../lib/money";
 import { emitDataChange } from "../data/sync";
 
@@ -72,10 +72,60 @@ export const toggleIncomeReceived = async (id: string, date: string) => {
 
 // --- Expenses ---
 export const saveExpense = async (f: Omit<Expense, "id"> & { id?: string }) => {
-  const row = { title: f.title, amount: f.amount, category_id: f.categoryId || null, date: f.date, merchant: f.merchant ?? null, notes: f.notes ?? null };
+  const row = { title: f.title, amount: f.amount, category_id: f.categoryId || null, date: f.date, merchant: f.merchant ?? null, notes: f.notes ?? null, receipt_path: f.receiptPath ?? null };
   if (f.id) await table("expenses").update(row).eq("id", f.id);
   else await table("expenses").insert(row);
   done();
+};
+
+// --- Receipt scanning ---
+/** Uploads to the caller's own folder; storage RLS rejects any other prefix. */
+export const uploadReceipt = async (file: File): Promise<string> => {
+  const { data: u } = await supabase.auth.getUser();
+  const uid = u.user?.id;
+  if (!uid) throw new Error("Not signed in");
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const path = `${uid}/${crypto.randomUUID()}.${ext || "jpg"}`;
+  const { error } = await supabase.storage.from("receipts").upload(path, file, {
+    contentType: file.type || "image/jpeg", upsert: false,
+  });
+  if (error) throw error;
+  return path;
+};
+
+/** Runs OCR in the Edge Function (where the API key lives) and returns the
+ *  extracted fields. Never saves anything — the user confirms first. */
+export const scanReceipt = async (path: string): Promise<ScannedReceipt> => {
+  const { data, error } = await supabase.functions.invoke("scan-receipt", { body: { path } });
+  if (error) {
+    // Supabase wraps non-2xx; surface the function's own message when present.
+    const ctx = (error as { context?: Response }).context;
+    if (ctx && typeof ctx.json === "function") {
+      try { const b = await ctx.json(); if (b?.error) throw new Error(b.error); } catch (e) {
+        if (e instanceof Error && e.message) throw e;
+      }
+    }
+    throw error;
+  }
+  if (!data?.ok) throw new Error(data?.error ?? "Scan failed");
+  const r = data.receipt ?? {};
+  return {
+    merchant: String(r.merchant ?? ""),
+    date: String(r.date ?? ""),
+    total: Number(r.total) || 0,
+    tax: Number(r.tax) || 0,
+    categoryHint: String(r.category_hint ?? ""),
+    confidence: (["high", "medium", "low"].includes(r.confidence) ? r.confidence : "low") as ScannedReceipt["confidence"],
+    lineItems: Array.isArray(r.line_items)
+      ? r.line_items.map((li: Record<string, unknown>) => ({ description: String(li.description ?? ""), amount: Number(li.amount) || 0 }))
+      : [],
+  };
+};
+
+/** Short-lived private URL for viewing a stored receipt. */
+export const receiptUrl = async (path: string): Promise<string | null> => {
+  const { data } = await supabase.storage.from("receipts").createSignedUrl(path, 300);
+  return data?.signedUrl ?? null;
 };
 export const deleteExpense = async (id: string): Promise<UndoFn | null> => {
   const e = await getRow("expenses", id);
@@ -105,13 +155,61 @@ export const contributeToGoal = async (id: string) => {
 };
 
 // --- Events ---
+/** `ownerId` targets a shared calendar you have write access to; omit for your own. */
 export const saveEvent = async (f: Omit<CalEvent, "id"> & { id?: string }) => {
-  const row = { title: f.title, date: f.date, notes: f.notes ?? null, color: f.color };
+  const row: Record<string, unknown> = { title: f.title, date: f.date, notes: f.notes ?? null, color: f.color };
   if (f.id) await table("events").update(row).eq("id", f.id);
-  else await table("events").insert(row);
+  else await table("events").insert(f.ownerId ? { ...row, user_id: f.ownerId } : row);
   done();
 };
 export const deleteEvent = async (id: string) => { await table("events").delete().eq("id", id); done(); };
+
+// --- Calendar sharing ---
+// Events are the only thing shared; bills, income, and expenses stay private
+// to their owner and are never visible through a share.
+export const listCalendarShares = async (): Promise<CalendarShare[]> => {
+  const { data, error } = await supabase.rpc("list_calendar_shares");
+  if (error) throw error;
+  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+    id: String(r.id),
+    direction: r.direction === "outgoing" ? "outgoing" : "incoming",
+    otherId: String(r.other_id),
+    otherEmail: String(r.other_email ?? ""),
+    permission: r.permission === "write" ? "write" : "read",
+    status: r.status as CalendarShare["status"],
+    createdAt: String(r.created_at),
+  }));
+};
+
+/** Invite by email. Resolves identically whether or not the address has an
+ *  account, so this can't be used to discover who is registered. */
+export const inviteCalendarShare = async (email: string, permission: SharePermission) => {
+  const { error } = await supabase.rpc("invite_calendar_share", { invitee_email: email, perm: permission });
+  if (error) throw error;
+  done();
+};
+
+/** Recipient answers an invitation. The DB rejects anything but accept/decline here. */
+export const respondToShare = async (id: string, accept: boolean) => {
+  const { error } = await supabase.from("calendar_shares")
+    .update({ status: accept ? "accepted" : "declined" }).eq("id", id);
+  if (error) throw error;
+  done();
+};
+
+/** Owner-only: change what a recipient can do. */
+export const setSharePermission = async (id: string, permission: SharePermission) => {
+  const { error } = await supabase.from("calendar_shares").update({ permission }).eq("id", id);
+  if (error) throw error;
+  done();
+};
+
+/** Either side can remove the link at any time. */
+export const removeShare = async (id: string) => {
+  const { error } = await supabase.from("calendar_shares").delete().eq("id", id);
+  if (error) throw error;
+  done();
+};
 
 // --- Categories ---
 export const setCategoryLimit = async (id: string, limit: number) => { await table("categories").update({ monthly_limit: limit }).eq("id", id); done(); };
