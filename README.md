@@ -133,10 +133,11 @@ Expenses tab → **Import / scan statement**. Three sources feed one review scre
 Every row is categorized individually from your own history, shown with an `auto` badge,
 and nothing is written until you confirm.
 
-Expenses tab → **Import bank CSV**. Works with any bank: the parser handles quoted fields,
-`$1,234.56`, accounting negatives `(12.34)`, European decimals, and several date formats,
-then guesses which column is which — single signed `Amount`, or split `Debit`/`Credit`.
-You confirm the mapping and review every row before anything is written.
+The CSV parser works with any bank: quoted fields, `$1,234.56`, accounting negatives
+`(12.34)`, European decimals, and several date formats. It guesses which column is which —
+single signed `Amount`, or split `Debit`/`Credit` — and you confirm the mapping.
+
+Whatever the source:
 
 - Money **in** (deposits, refunds) is detected and excluded by default
 - Transactions you've already recorded are flagged and unticked
@@ -147,10 +148,6 @@ You confirm the mapping and review every row before anything is written.
 
 ## Self-employment (optional)
 
-The **Tax** tab includes a readiness check (uncategorized spend, missing receipts,
-income not marked received), a prior-year comparison that flags deductions claimed
-last year but not this one, and a full export package for a preparer.
-
 Off by default. Turn on **Settings → I have self-employment income** and the app adds:
 
 - **Business tagging** on expenses, with a **business-use %** for mixed costs and a
@@ -158,8 +155,15 @@ Off by default. Turn on **Settings → I have self-employment income** and the a
 - **Mileage log** — date, miles, and business purpose per trip (what the IRS actually
   asks for), valued at a user-editable standard rate, exportable as CSV.
 - **Tax tab** — income, deductions grouped by Schedule C line, net profit, an SE-tax
-  set-aside estimate, quarterly due dates, and a one-click export for an accountant.
+  set-aside estimate, and quarterly due dates. Plus a **readiness check** (uncategorized
+  spend, expenses over $75 with no receipt, income never marked received), a **prior-year
+  comparison** that flags deductions claimed last year but not this one, and a **ZIP export
+  package** for a preparer: summary, itemized expenses, income, mileage, and every receipt
+  image named `YYYY-MM-DD_merchant_amount`.
 - Bulk business tagging when importing a business card statement.
+- **Retention review** in Settings — receipts grouped by year, business vs. personal.
+  Only personal receipts from past years can be cleared in bulk; business receipts back
+  a filed return, so bulk deletion is deliberately not offered.
 
 Greenline is a budget tracker, **not** bookkeeping software: no client books, no chart of
 accounts, no double entry. Tax figures are planning estimates, not advice or a filed return.
