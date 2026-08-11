@@ -1,6 +1,6 @@
 // Row (snake_case, Postgres) → app object (camelCase). Postgres `numeric` comes
 // back from supabase-js as a string, so every numeric field is coerced here.
-import type { Bill, CalEvent, Category, Debt, Expense, Goal, IncomeSource, Settings, SinkingFund } from "../types";
+import type { Bill, CalEvent, Category, Debt, Expense, Goal, IncomeSource, Mileage, Settings, SinkingFund } from "../types";
 
 type Row = Record<string, unknown>;
 const n = (v: unknown, fb = 0): number => { const x = Number(v); return Number.isFinite(x) ? x : fb; };
@@ -15,6 +15,9 @@ export const settingsFromRow = (r: Row): Settings => ({
   extraDebtBudget: n(r.extra_debt_budget),
   emergencyMonths: n(r.emergency_months, 3),
   rolloverBudgets: Boolean(r.rollover_budgets),
+  businessMode: Boolean(r.business_mode),
+  mileageRate: n(r.mileage_rate, 0.7),
+  businessName: r.business_name == null ? undefined : s(r.business_name),
 });
 
 export const categoryFromRow = (r: Row): Category => ({ id: s(r.id), name: s(r.name), color: s(r.color), limit: n(r.monthly_limit) });
@@ -23,6 +26,7 @@ export const incomeFromRow = (r: Row): IncomeSource => ({
   id: s(r.id), name: s(r.name), amount: n(r.amount),
   frequency: r.frequency as IncomeSource["frequency"], anchorDate: s(r.anchor_date),
   received: map(r.received), taxRate: r.tax_rate == null ? undefined : n(r.tax_rate),
+  business: Boolean(r.business),
 });
 
 export const billFromRow = (r: Row): Bill => ({
@@ -36,6 +40,15 @@ export const expenseFromRow = (r: Row): Expense => ({
   date: s(r.date), merchant: r.merchant == null ? undefined : s(r.merchant),
   notes: r.notes == null ? undefined : s(r.notes),
   receiptPath: r.receipt_path == null ? undefined : s(r.receipt_path),
+  business: Boolean(r.business),
+  businessPct: r.business_pct == null ? undefined : n(r.business_pct, 100),
+  taxCategory: r.tax_category == null ? undefined : s(r.tax_category),
+});
+
+export const mileageFromRow = (r: Row): Mileage => ({
+  id: s(r.id), date: s(r.date), miles: n(r.miles), purpose: s(r.purpose),
+  from: r.from_location == null ? undefined : s(r.from_location),
+  to: r.to_location == null ? undefined : s(r.to_location),
 });
 
 export const goalFromRow = (r: Row): Goal => ({
@@ -62,12 +75,17 @@ export const settingsToRow = (v: Settings) => ({
   theme: v.theme, clock24: v.clock24, start_balance: v.startBalance,
   buffer_floor: v.bufferFloor, extra_debt_budget: v.extraDebtBudget, emergency_months: v.emergencyMonths,
   rollover_budgets: v.rolloverBudgets,
+  business_mode: v.businessMode,
+  mileage_rate: v.mileageRate,
+  business_name: v.businessName ?? null,
 });
 export const categoryToRow = (c: Category, i = 0) => ({ id: c.id, name: c.name, color: c.color, monthly_limit: c.limit, sort_order: i });
-export const incomeToRow = (v: IncomeSource) => ({ id: v.id, name: v.name, amount: v.amount, frequency: v.frequency, anchor_date: v.anchorDate, received: v.received, tax_rate: v.taxRate ?? 0 });
+export const incomeToRow = (v: IncomeSource) => ({ id: v.id, name: v.name, amount: v.amount, frequency: v.frequency, anchor_date: v.anchorDate, received: v.received, tax_rate: v.taxRate ?? 0, business: v.business ?? false });
 export const billToRow = (v: Bill) => ({ id: v.id, name: v.name, amount: v.amount, category_id: v.categoryId || null, due_day: v.dueDay, priority: v.priority, notes: v.notes ?? null, paused: v.paused ?? false, paid: v.paid });
-export const expenseToRow = (v: Expense) => ({ id: v.id, title: v.title, amount: v.amount, category_id: v.categoryId || null, date: v.date, merchant: v.merchant ?? null, notes: v.notes ?? null });
+export const expenseToRow = (v: Expense) => ({ id: v.id, title: v.title, amount: v.amount, category_id: v.categoryId || null, date: v.date, merchant: v.merchant ?? null, notes: v.notes ?? null, receipt_path: v.receiptPath ?? null, business: v.business ?? false, business_pct: v.businessPct ?? 100, tax_category: v.taxCategory ?? null });
 export const goalToRow = (v: Goal) => ({ id: v.id, name: v.name, target: v.target, saved: v.saved, monthly: v.monthly, color: v.color });
 export const eventToRow = (v: CalEvent) => ({ id: v.id, title: v.title, date: v.date, notes: v.notes ?? null, color: v.color });
 export const sinkingToRow = (v: SinkingFund) => ({ id: v.id, name: v.name, total: v.total, cadence_months: v.cadenceMonths, due_date: v.dueDate, saved: v.saved, category_id: v.categoryId || null, color: v.color });
 export const debtToRow = (v: Debt) => ({ id: v.id, name: v.name, balance: v.balance, apr: v.apr, min_payment: v.minPayment, color: v.color });
+
+export const mileageToRow = (v: Mileage) => ({ id: v.id, date: v.date, miles: v.miles, purpose: v.purpose, from_location: v.from ?? null, to_location: v.to ?? null });

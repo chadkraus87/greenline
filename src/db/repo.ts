@@ -7,6 +7,7 @@ import * as M from "./mappers";
 export const DEFAULT_SETTINGS: Settings = {
   theme: "dark", clock24: false, startBalance: 0,
   bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 3, rolloverBudgets: false,
+  businessMode: false, mileageRate: 0.70,
 };
 
 // Kept for reference/UI ordering; the DB seeds these per user on approval.
@@ -42,7 +43,7 @@ export async function patchSettings(patch: Partial<Settings>): Promise<void> {
 
 /** Full snapshot of the signed-in user's data (RLS scopes every query to them). */
 export async function loadAll(): Promise<AppData> {
-  const [settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts] = await Promise.all([
+  const [settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts, mileage] = await Promise.all([
     getSettings(),
     supabase.from("categories").select("*").order("sort_order").order("name"),
     supabase.from("incomes").select("*"),
@@ -52,6 +53,7 @@ export async function loadAll(): Promise<AppData> {
     supabase.from("events").select("*"),
     supabase.from("sinking_funds").select("*"),
     supabase.from("debts").select("*"),
+    supabase.from("mileage").select("*").order("date", { ascending: false }),
   ]);
   return {
     settings,
@@ -63,12 +65,13 @@ export async function loadAll(): Promise<AppData> {
     events: (events.data ?? []).map(M.eventFromRow),
     sinkingFunds: (sinkingFunds.data ?? []).map(M.sinkingFromRow),
     debts: (debts.data ?? []).map(M.debtFromRow),
+    mileage: (mileage.data ?? []).map(M.mileageFromRow),
   };
 }
 
 export const exportAll = loadAll;
 
-const DATA_TABLES = ["categories", "incomes", "bills", "expenses", "goals", "events", "sinking_funds", "debts"] as const;
+const DATA_TABLES = ["categories", "incomes", "bills", "expenses", "goals", "events", "sinking_funds", "debts", "mileage"] as const;
 
 async function clearUserData(uid: string): Promise<void> {
   // RLS already scopes to the user; the explicit filter is defense-in-depth.
@@ -92,6 +95,7 @@ export async function importAll(raw: unknown): Promise<void> {
     data.events.length && supabase.from("events").insert(data.events.map(M.eventToRow)),
     data.sinkingFunds.length && supabase.from("sinking_funds").insert(data.sinkingFunds.map(M.sinkingToRow)),
     data.debts.length && supabase.from("debts").insert(data.debts.map(M.debtToRow)),
+    data.mileage.length && supabase.from("mileage").insert(data.mileage.map(M.mileageToRow)),
   ]);
   emitDataChange();
 }

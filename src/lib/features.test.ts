@@ -5,8 +5,8 @@ import { computeMonth } from "./forecast";
 import type { AppData, Debt } from "../types";
 
 const empty = (over: Partial<AppData> = {}): AppData => ({
-  settings: { theme: "dark", clock24: false, startBalance: 0, bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 3, rolloverBudgets: false },
-  categories: [], incomes: [], bills: [], expenses: [], goals: [], events: [], sinkingFunds: [], debts: [],
+  settings: { theme: "dark", clock24: false, startBalance: 0, bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 3, rolloverBudgets: false, businessMode: false, mileageRate: 0.7 },
+  categories: [], incomes: [], bills: [], expenses: [], goals: [], events: [], sinkingFunds: [], debts: [], mileage: [],
   ...over,
 });
 const today = new Date(2026, 6, 20);
@@ -64,7 +64,7 @@ describe("forecast reserves & buffer", () => {
 
   it("buffer floor flags the crossing day and docks health", () => {
     const d = empty({
-      settings: { theme: "dark", clock24: false, startBalance: 300, bufferFloor: 500, extraDebtBudget: 0, emergencyMonths: 3, rolloverBudgets: false },
+      settings: { theme: "dark", clock24: false, startBalance: 300, bufferFloor: 500, extraDebtBudget: 0, emergencyMonths: 3, rolloverBudgets: false, businessMode: false, mileageRate: 0.7 },
       bills: [{ id: "b", name: "Rent", amount: 100, categoryId: "c", dueDay: 5, priority: "normal", paid: {} }],
     });
     const m = computeMonth(d, 2026, 6, today);
@@ -87,7 +87,7 @@ describe("insights", () => {
   });
   it("emergency fund target scales with months", () => {
     const d = empty({
-      settings: { theme: "dark", clock24: false, startBalance: 0, bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 6, rolloverBudgets: false },
+      settings: { theme: "dark", clock24: false, startBalance: 0, bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 6, rolloverBudgets: false, businessMode: false, mileageRate: 0.7 },
       bills: [{ id: "b", name: "Rent", amount: 1000, categoryId: "c", dueDay: 1, priority: "normal", paid: {} }],
     });
     const m = computeMonth(d, 2026, 6, today);

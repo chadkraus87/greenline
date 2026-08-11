@@ -8,6 +8,8 @@ export interface IncomeSource {
   anchorDate: string; received: Record<string, boolean>;
   /** % of this income to set aside for taxes (0–100). Reserved from "left to spend". */
   taxRate?: number;
+  /** Self-employment / 1099 income, as opposed to W-2 wages. */
+  business?: boolean;
 }
 export interface Bill {
   id: string; name: string; amount: number; categoryId: string; dueDay: number;
@@ -18,6 +20,18 @@ export interface Expense {
   merchant?: string; notes?: string;
   /** Storage path of the scanned receipt image, if this expense came from one. */
   receiptPath?: string;
+  /** Self-employment: counts toward Schedule C rather than personal spending. */
+  business?: boolean;
+  /** Business-use share for mixed costs (a phone that's 60% business). */
+  businessPct?: number;
+  /** Schedule C line id — see lib/tax.ts SCHEDULE_C. */
+  taxCategory?: string;
+}
+
+/** A business trip logged for the IRS standard mileage deduction. */
+export interface Mileage {
+  id: string; date: string; miles: number; purpose: string;
+  from?: string; to?: string;
 }
 
 /** Fields extracted from a receipt photo — always reviewed by a human before saving. */
@@ -57,6 +71,11 @@ export interface Settings {
   emergencyMonths: number;
   /** Envelope budgeting: unspent category budget carries into next month. */
   rolloverBudgets: boolean;
+  /** Reveals self-employment features. Off for W-2-only users. */
+  businessMode: boolean;
+  /** IRS standard mileage rate — changes annually, so it's user-editable. */
+  mileageRate: number;
+  businessName?: string;
 }
 
 export interface AppData {
@@ -69,6 +88,7 @@ export interface AppData {
   events: CalEvent[];
   sinkingFunds: SinkingFund[];
   debts: Debt[];
+  mileage: Mileage[];
 }
 
 export interface IncomeOcc { key: string; sourceId: string; name: string; amount: number; date: string; day: number; received: boolean; }

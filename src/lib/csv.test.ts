@@ -3,9 +3,9 @@ import { toCsv, expensesCsv } from "./csv";
 import type { AppData } from "../types";
 
 const data = (over: Partial<AppData> = {}): AppData => ({
-  settings: { theme: "dark", clock24: false, startBalance: 0, bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 3, rolloverBudgets: false },
+  settings: { theme: "dark", clock24: false, startBalance: 0, bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 3, rolloverBudgets: false, businessMode: false, mileageRate: 0.7 },
   categories: [{ id: "food", name: "Food", color: "#000", limit: 0 }],
-  incomes: [], bills: [], expenses: [], goals: [], events: [], sinkingFunds: [], debts: [],
+  incomes: [], bills: [], expenses: [], goals: [], events: [], sinkingFunds: [], debts: [], mileage: [],
   ...over,
 });
 

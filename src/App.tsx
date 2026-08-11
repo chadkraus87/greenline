@@ -1,10 +1,11 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3, Check, ChevronLeft, ChevronRight, CircleDollarSign, DatabaseBackup, Landmark,
-  LayoutDashboard, LogOut, Moon, PiggyBank, Plus, Receipt, Search, Share2, ShieldCheck, Sun, Umbrella, Undo2, Wallet, X,
+  Briefcase, Car, FileText, LayoutDashboard, LogOut, Moon, PiggyBank, Plus, Receipt, Search, Settings as SettingsIcon,
+  Share2, ShieldCheck, Sun, Umbrella, Undo2, Wallet, X,
 } from "lucide-react";
 import { patchSettings } from "./db/repo";
-import type { Bill, Category, Debt, Expense, Goal, IncomeSource, MonthModel, SinkingFund } from "./types";
+import type { Bill, Category, Debt, Expense, Goal, IncomeSource, Mileage, MonthModel, SinkingFund } from "./types";
 import { computeMonth } from "./lib/forecast";
 import { categoryRollover } from "./lib/insights";
 import { MONTHS } from "./lib/dates";
@@ -30,6 +31,10 @@ import { DebtForm, DebtsView } from "./features/debts/DebtsFeature";
 import { SinkingFundForm, ReservesView } from "./features/reserves/ReservesFeature";
 const ReportsView = lazy(() => import("./features/reports/ReportsView").then((m) => ({ default: m.ReportsView })));
 import { BackupModal } from "./features/BackupModal";
+import { SettingsModal } from "./features/SettingsModal";
+import { ReceiptVault } from "./features/receipts/ReceiptVault";
+import { MileageForm, MileageView } from "./features/mileage/MileageFeature";
+const TaxView = lazy(() => import("./features/tax/TaxView").then((m) => ({ default: m.TaxView })));
 import { toggleBillPaid, type UndoFn } from "./db/actions";
 
 type ModalState =
@@ -38,15 +43,21 @@ type ModalState =
   | { type: "event"; date?: string } | { type: "day"; date: string }
   | { type: "debt"; data?: Debt } | { type: "sinking"; data?: SinkingFund }
   | { type: "category"; data?: Category }
-  | { type: "backup" } | { type: "admin" } | { type: "sharing" } | { type: "import" } | null;
+  | { type: "backup" } | { type: "admin" } | { type: "sharing" } | { type: "import" }
+  | { type: "settings" } | { type: "mileage"; data?: Mileage } | null;
 
-const TABS = [
+const BASE_TABS = [
   ["overview", "Overview", LayoutDashboard], ["bills", "Bills", Receipt],
   ["income", "Income", CircleDollarSign], ["expenses", "Expenses", Wallet],
+  ["receipts", "Receipts", FileText],
   ["budgets", "Budgets", BarChart3], ["goals", "Goals", PiggyBank],
   ["reserves", "Reserves", Umbrella], ["debt", "Debt", Landmark], ["reports", "Reports", BarChart3],
 ] as const;
-type Tab = (typeof TABS)[number][0];
+// Only shown when self-employment mode is on, so W-2 users never see them.
+const BUSINESS_TABS = [
+  ["mileage", "Mileage", Car], ["tax", "Tax", Briefcase],
+] as const;
+type Tab = (typeof BASE_TABS)[number][0] | (typeof BUSINESS_TABS)[number][0];
 
 export default function App() {
   const toast = useToast();
@@ -67,7 +78,7 @@ export default function App() {
   const [undo, setUndo] = useState<{ label: string; fn: UndoFn } | null>(null);
   const notified = useRef(new Set<string>());
 
-  const settings = data?.settings ?? { theme: "dark" as const, clock24: false, startBalance: 0, bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 3, rolloverBudgets: false };
+  const settings = data?.settings ?? { theme: "dark" as const, clock24: false, startBalance: 0, bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 3, rolloverBudgets: false, businessMode: false, mileageRate: 0.7 };
   const categories = data?.categories ?? [];
   const incomes = data?.incomes ?? [];
   const bills = data?.bills ?? [];
@@ -76,20 +87,23 @@ export default function App() {
   const events = data?.events ?? [];
   const sinkingFunds = data?.sinkingFunds ?? [];
   const debts = data?.debts ?? [];
+  const mileage = data?.mileage ?? [];
 
   useEffect(() => { document.documentElement.dataset.theme = settings.theme; }, [settings.theme]);
 
+  const visibleTabs = settings.businessMode ? [...BASE_TABS, ...BUSINESS_TABS] : BASE_TABS;
+
   const dayStamp = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours()}`;
   const month: MonthModel = useMemo(
-    () => computeMonth({ settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts }, view.y, view.m, now),
+    () => computeMonth({ settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts, mileage }, view.y, view.m, now),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts, view.y, view.m, dayStamp]
+    [settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts, mileage, view.y, view.m, dayStamp]
   );
 
   // Envelope carryover — only walked when the setting is on (12-month lookback).
   const rollover = useMemo(
     () => (settings.rolloverBudgets && data
-      ? categoryRollover({ settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts }, view.y, view.m, now)
+      ? categoryRollover({ settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts, mileage }, view.y, view.m, now)
       : {}),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [settings.rolloverBudgets, data, categories, expenses, bills, view.y, view.m, dayStamp]
@@ -149,6 +163,7 @@ export default function App() {
                 display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>{pendingInvites}</span>
             )}
           </button>
+          <button className="gl-icon-btn" aria-label="Settings" title="Settings" onClick={() => setModal({ type: "settings" })}><SettingsIcon size={15} /></button>
           <button className="gl-icon-btn" aria-label="Backups" title="Backups" onClick={() => setModal({ type: "backup" })}><DatabaseBackup size={15} /></button>
           {profile?.role === "admin" && (
             <button className="gl-icon-btn" aria-label="Admin — manage users" title="Admin — manage users" onClick={() => setModal({ type: "admin" })}><ShieldCheck size={15} /></button>
@@ -205,7 +220,7 @@ export default function App() {
       )}
 
       <nav role="tablist" style={{ display: "flex", gap: 4, marginBottom: 14, overflowX: "auto" }}>
-        {TABS.map(([id, label, Icon]) => (
+        {visibleTabs.map(([id, label, Icon]) => (
           <button key={id} className="gl-tab" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
             <Icon size={14} /> {label}
           </button>
@@ -281,6 +296,20 @@ export default function App() {
           onImport={() => setModal({ type: "import" })}
           onUndoable={onUndoable} />
       )}
+      {tab === "receipts" && (
+        <ReceiptVault expenses={expenses} categories={categories} businessMode={settings.businessMode}
+          onEdit={(e) => setModal({ type: "expense", data: e })} />
+      )}
+      {tab === "mileage" && settings.businessMode && (
+        <MileageView entries={mileage} settings={settings} year={view.y}
+          onAdd={() => setModal({ type: "mileage" })}
+          onEdit={(m) => setModal({ type: "mileage", data: m })} onUndoable={onUndoable} />
+      )}
+      {tab === "tax" && settings.businessMode && (
+        <Suspense fallback={<div style={{ color: "var(--dim)", padding: 20 }}>Loading…</div>}>
+          <TaxView data={{ settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts, mileage }} year={view.y} />
+        </Suspense>
+      )}
       {tab === "budgets" && (
         <BudgetsView month={month} categories={categories} elapsedPct={dayProgress}
           rollover={rollover} rolloverOn={settings.rolloverBudgets}
@@ -309,13 +338,13 @@ export default function App() {
       )}
       {tab === "reports" && (
         <Suspense fallback={<div style={{ color: "var(--dim)", padding: 20 }}>Loading charts…</div>}>
-          <ReportsView month={month} categories={categories} data={{ settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts }} y={view.y} m={view.m} now={now} />
+          <ReportsView month={month} categories={categories} data={{ settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts, mileage }} y={view.y} m={view.m} now={now} />
         </Suspense>
       )}
 
       {modal?.type === "bill" && <BillForm initial={modal.data} categories={categories} onClose={() => setModal(null)} />}
       {modal?.type === "income" && <IncomeForm initial={modal.data} defaultDate={month.todayYmd} onClose={() => setModal(null)} />}
-      {modal?.type === "expense" && <ExpenseForm initial={modal.data} defaultDate={modal.date ?? defaultExpenseDate} categories={categories} prefill={modal.prefill} onClose={() => setModal(null)} />}
+      {modal?.type === "expense" && <ExpenseForm initial={modal.data} defaultDate={modal.date ?? defaultExpenseDate} categories={categories} prefill={modal.prefill} businessMode={settings.businessMode} onClose={() => setModal(null)} />}
       {modal?.type === "goal" && <GoalForm initial={modal.data} onClose={() => setModal(null)} />}
       {modal?.type === "debt" && <DebtForm initial={modal.data} onClose={() => setModal(null)} />}
       {modal?.type === "sinking" && <SinkingFundForm initial={modal.data} categories={categories} defaultDate={defaultExpenseDate} onClose={() => setModal(null)} />}
@@ -330,7 +359,9 @@ export default function App() {
       {modal?.type === "backup" && <BackupModal onClose={() => setModal(null)} />}
       {modal?.type === "admin" && <AdminPanel onClose={() => setModal(null)} />}
       {modal?.type === "sharing" && <SharingModal onClose={() => setModal(null)} />}
-      {modal?.type === "import" && <ImportModal categories={categories} existing={expenses} onClose={() => setModal(null)} />}
+      {modal?.type === "settings" && <SettingsModal settings={settings} onClose={() => setModal(null)} />}
+      {modal?.type === "mileage" && <MileageForm initial={modal.data} defaultDate={defaultExpenseDate} onClose={() => setModal(null)} />}
+      {modal?.type === "import" && <ImportModal categories={categories} existing={expenses} businessMode={settings.businessMode} onClose={() => setModal(null)} />}
 
       {undo && (
         <div className="gl-toast" style={{ bottom: 70 }}>

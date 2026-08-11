@@ -5,8 +5,8 @@ import { money, num, sanitize } from "./money";
 import type { AppData, IncomeSource } from "../types";
 
 const empty = (): AppData => ({
-  settings: { theme: "dark", clock24: false, startBalance: 0, bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 3, rolloverBudgets: false },
-  categories: [], incomes: [], bills: [], expenses: [], goals: [], events: [], sinkingFunds: [], debts: [],
+  settings: { theme: "dark", clock24: false, startBalance: 0, bufferFloor: 0, extraDebtBudget: 0, emergencyMonths: 3, rolloverBudgets: false, businessMode: false, mileageRate: 0.7 },
+  categories: [], incomes: [], bills: [], expenses: [], goals: [], events: [], sinkingFunds: [], debts: [], mileage: [],
 });
 
 describe("reviewer edge cases", () => {

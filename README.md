@@ -134,6 +134,27 @@ You confirm the mapping and review every row before anything is written.
 
 `docs/sample-bank-export.csv` is a realistic file for trying it out.
 
+## Self-employment (optional)
+
+Off by default. Turn on **Settings → I have self-employment income** and the app adds:
+
+- **Business tagging** on expenses, with a **business-use %** for mixed costs and a
+  **Schedule C category** per expense. Meals are correctly treated as 50% deductible.
+- **Mileage log** — date, miles, and business purpose per trip (what the IRS actually
+  asks for), valued at a user-editable standard rate, exportable as CSV.
+- **Tax tab** — income, deductions grouped by Schedule C line, net profit, an SE-tax
+  set-aside estimate, quarterly due dates, and a one-click export for an accountant.
+- Bulk business tagging when importing a business card statement.
+
+Greenline is a budget tracker, **not** bookkeeping software: no client books, no chart of
+accounts, no double entry. Tax figures are planning estimates, not advice or a filed return.
+
+## Receipts
+
+Every scanned receipt is filed in a searchable **Receipts** tab — filter by year,
+business/personal, or free text (merchant, amount, notes), then view the original image.
+Images stay private; each view mints a short-lived signed URL.
+
 ## Calendar sharing
 
 Share **calendar events** with another account: invite by email, pick view-only or

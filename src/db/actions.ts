@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import type { Bill, CalendarShare, CalEvent, Category, Debt, Expense, Goal, IncomeSource, ScannedReceipt, SharePermission, SinkingFund } from "../types";
+import type { Bill, CalendarShare, CalEvent, Category, Debt, Expense, Goal, IncomeSource, Mileage, ScannedReceipt, SharePermission, SinkingFund } from "../types";
 import { round2 } from "../lib/money";
 import { emitDataChange } from "../data/sync";
 
@@ -50,7 +50,7 @@ export const togglePauseBill = async (id: string) => {
 
 // --- Income ---
 export const saveIncome = async (f: Omit<IncomeSource, "id" | "received"> & { id?: string }) => {
-  const row = { name: f.name, amount: f.amount, frequency: f.frequency, anchor_date: f.anchorDate, tax_rate: f.taxRate ?? 0 };
+  const row = { name: f.name, amount: f.amount, frequency: f.frequency, anchor_date: f.anchorDate, tax_rate: f.taxRate ?? 0, business: f.business ?? false };
   if (f.id) await table("incomes").update(row).eq("id", f.id);
   else await table("incomes").insert({ ...row, received: {} });
   done();
@@ -72,10 +72,31 @@ export const toggleIncomeReceived = async (id: string, date: string) => {
 
 // --- Expenses ---
 export const saveExpense = async (f: Omit<Expense, "id"> & { id?: string }) => {
-  const row = { title: f.title, amount: f.amount, category_id: f.categoryId || null, date: f.date, merchant: f.merchant ?? null, notes: f.notes ?? null, receipt_path: f.receiptPath ?? null };
+  const row = {
+    title: f.title, amount: f.amount, category_id: f.categoryId || null, date: f.date,
+    merchant: f.merchant ?? null, notes: f.notes ?? null, receipt_path: f.receiptPath ?? null,
+    business: f.business ?? false,
+    business_pct: f.business ? (f.businessPct ?? 100) : 100,
+    tax_category: f.business ? (f.taxCategory ?? null) : null,
+  };
   if (f.id) await table("expenses").update(row).eq("id", f.id);
   else await table("expenses").insert(row);
   done();
+};
+
+// --- Mileage (standard-rate deduction log; not a cash transaction) ---
+export const saveMileage = async (f: Omit<Mileage, "id"> & { id?: string }) => {
+  const row = { date: f.date, miles: f.miles, purpose: f.purpose, from_location: f.from ?? null, to_location: f.to ?? null };
+  if (f.id) await table("mileage").update(row).eq("id", f.id);
+  else await table("mileage").insert(row);
+  done();
+};
+export const deleteMileage = async (id: string): Promise<UndoFn | null> => {
+  const m = await getRow("mileage", id);
+  if (!m) return null;
+  await table("mileage").delete().eq("id", id);
+  done();
+  return undoInsert("mileage", m);
 };
 
 /** Bulk insert from a CSV import. Chunked so a large statement can't time out. */
@@ -84,6 +105,9 @@ export const bulkAddExpenses = async (items: Omit<Expense, "id">[]): Promise<num
   const rows = items.map((f) => ({
     title: f.title, amount: f.amount, category_id: f.categoryId || null,
     date: f.date, merchant: f.merchant ?? null, notes: f.notes ?? null,
+    business: f.business ?? false,
+    business_pct: f.business ? (f.businessPct ?? 100) : 100,
+    tax_category: f.business ? (f.taxCategory ?? null) : null,
   }));
   const CHUNK = 250;
   let inserted = 0;

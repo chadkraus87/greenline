@@ -1,14 +1,16 @@
 import { useState } from "react";
-import { Pencil, Trash2, ScanLine, Upload } from "lucide-react";
+import { Pencil, Trash2, ScanLine, Upload, Briefcase } from "lucide-react";
 import type { Category, Expense, MonthModel } from "../../types";
 import { Modal, Field, FormActions, ViewHeader, Empty } from "../../components/ui";
 import { money, num, sanitize } from "../../lib/money";
 import * as act from "../../db/actions";
 import { useToast } from "../../hooks/useToasts";
 import { ReceiptScanner, type ReceiptPrefill } from "./ReceiptScanner";
+import { SCHEDULE_C, TAX_LINE_BY_ID } from "../../lib/tax";
 
-export function ExpenseForm({ initial, categories, defaultDate, prefill, onClose }:
-  { initial?: Expense; categories: Category[]; defaultDate: string; prefill?: ReceiptPrefill; onClose: () => void }) {
+export function ExpenseForm({ initial, categories, defaultDate, prefill, businessMode, onClose }:
+  { initial?: Expense; categories: Category[]; defaultDate: string; prefill?: ReceiptPrefill;
+    businessMode?: boolean; onClose: () => void }) {
   const toast = useToast();
   const [f, setF] = useState({
     title: prefill?.title ?? initial?.title ?? "",
@@ -17,13 +19,23 @@ export function ExpenseForm({ initial, categories, defaultDate, prefill, onClose
     date: prefill?.date || initial?.date || defaultDate,
     merchant: prefill?.merchant ?? initial?.merchant ?? "",
     notes: initial?.notes ?? "",
+    business: initial?.business ?? false,
+    businessPct: (initial?.businessPct ?? 100).toString(),
+    taxCategory: initial?.taxCategory ?? "",
   });
   const receiptPath = prefill?.receiptPath ?? initial?.receiptPath;
+  const deductible = f.business
+    ? (num(f.amount) * Math.max(0, Math.min(100, parseFloat(f.businessPct) || 0)) / 100)
+      * ((TAX_LINE_BY_ID.get(f.taxCategory)?.deductiblePct ?? 100) / 100)
+    : 0;
   const save = async () => {
     await act.saveExpense({
       id: initial?.id, title: sanitize(f.title), amount: num(f.amount),
       categoryId: f.categoryId, date: f.date, merchant: sanitize(f.merchant), notes: sanitize(f.notes),
       receiptPath,
+      business: f.business,
+      businessPct: Math.max(0, Math.min(100, parseFloat(f.businessPct) || 100)),
+      taxCategory: f.taxCategory || undefined,
     });
     toast(initial ? "Expense updated" : "Expense added");
     onClose();
@@ -53,6 +65,46 @@ export function ExpenseForm({ initial, categories, defaultDate, prefill, onClose
         <Field label="Merchant"><input className="gl-input" value={f.merchant} onChange={(e) => setF({ ...f, merchant: e.target.value })} /></Field>
       </div>
       <Field label="Notes"><input className="gl-input" value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></Field>
+
+      {businessMode && (
+        <div style={{ borderTop: "1px solid var(--line)", marginTop: 14, paddingTop: 12 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer", fontSize: 13.5 }}>
+            <input type="checkbox" checked={f.business} onChange={(e) => setF({ ...f, business: e.target.checked })} />
+            <Briefcase size={14} /> Business expense
+          </label>
+          {f.business && (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10, marginTop: 6 }}>
+                <Field label="Schedule C category">
+                  <select className="gl-select" value={f.taxCategory} onChange={(e) => setF({ ...f, taxCategory: e.target.value })}>
+                    <option value="">— pick one —</option>
+                    {SCHEDULE_C.map((l) => <option key={l.id} value={l.id}>{l.label} (line {l.line})</option>)}
+                  </select>
+                </Field>
+                <Field label="Business use %">
+                  <input className="gl-input gl-mono" type="number" min="0" max="100" step="1"
+                    value={f.businessPct} onChange={(e) => setF({ ...f, businessPct: e.target.value })} />
+                </Field>
+              </div>
+              {f.taxCategory && TAX_LINE_BY_ID.get(f.taxCategory)?.hint && (
+                <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 2 }}>
+                  {TAX_LINE_BY_ID.get(f.taxCategory)!.hint}
+                </div>
+              )}
+              <div style={{ fontSize: 12.5, color: "var(--fern)", marginTop: 6 }}>
+                Deductible: {money(deductible)}
+                {TAX_LINE_BY_ID.get(f.taxCategory)?.deductiblePct === 50 && " — meals are 50% deductible"}
+              </div>
+              {!f.taxCategory && (
+                <div style={{ fontSize: 11.5, color: "var(--brass)", marginTop: 4 }}>
+                  Pick a category or this won't count toward your deductions.
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       <FormActions onCancel={onClose} onSave={save} saveLabel={initial ? "Save changes" : "Add expense"} disabled={!f.title.trim() || !num(f.amount) || !f.date} />
     </Modal>
   );

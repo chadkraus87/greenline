@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { Upload, AlertTriangle, Check } from "lucide-react";
 import { Modal, Field, Empty } from "../../components/ui";
 import type { Category, Expense } from "../../types";
+import { SCHEDULE_C } from "../../lib/tax";
 import { money } from "../../lib/money";
 import {
   parseCsv, detectColumns, looksLikeHeader, buildRows, markDuplicates,
@@ -11,8 +12,8 @@ import * as act from "../../db/actions";
 import { useToast } from "../../hooks/useToasts";
 
 /** Import a bank or card CSV. Nothing is written until the preview is confirmed. */
-export function ImportModal({ categories, existing, onClose }:
-  { categories: Category[]; existing: Expense[]; onClose: () => void }) {
+export function ImportModal({ categories, existing, businessMode, onClose }:
+  { categories: Category[]; existing: Expense[]; businessMode?: boolean; onClose: () => void }) {
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [headers, setHeaders] = useState<string[]>([]);
@@ -21,6 +22,8 @@ export function ImportModal({ categories, existing, onClose }:
   const [flipSign, setFlipSign] = useState(false);
   const [categoryId, setCategoryId] = useState(categories[0]?.id ?? "");
   const [overrides, setOverrides] = useState<Record<number, boolean>>({});
+  const [asBusiness, setAsBusiness] = useState(false);
+  const [taxCategory, setTaxCategory] = useState("");
   const [busy, setBusy] = useState(false);
 
   const readFile = async (file: File) => {
@@ -64,6 +67,9 @@ export function ImportModal({ categories, existing, onClose }:
         categoryId,
         date: r.date,
         merchant: cleanDescription(r.description) || undefined,
+        business: asBusiness,
+        businessPct: 100,
+        taxCategory: asBusiness ? (taxCategory || undefined) : undefined,
       })));
       toast(`Imported ${n} transaction${n === 1 ? "" : "s"}`);
       onClose();
@@ -117,6 +123,28 @@ export function ImportModal({ categories, existing, onClose }:
               </select>
             </Field>
           </div>
+
+          {businessMode && (
+            <div style={{ borderTop: "1px solid var(--line)", marginTop: 10, paddingTop: 10 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, cursor: "pointer" }}>
+                <input type="checkbox" checked={asBusiness} onChange={(e) => setAsBusiness(e.target.checked)} />
+                These are business expenses (e.g. a business card statement)
+              </label>
+              {asBusiness && (
+                <div style={{ marginTop: 8, maxWidth: 320 }}>
+                  <Field label="Schedule C category for all">
+                    <select className="gl-select" value={taxCategory} onChange={(e) => setTaxCategory(e.target.value)}>
+                      <option value="">— pick one —</option>
+                      {SCHEDULE_C.map((l) => <option key={l.id} value={l.id}>{l.label} (line {l.line})</option>)}
+                    </select>
+                  </Field>
+                  <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 4 }}>
+                    You can refine individual rows afterwards on the Expenses tab.
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {map!.amount >= 0 && (
             <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: "var(--dim)", marginTop: 8, cursor: "pointer" }}>
