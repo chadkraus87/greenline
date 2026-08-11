@@ -1,12 +1,16 @@
 import { useRef, useState } from "react";
 import { Camera, Loader2 } from "lucide-react";
-import type { Category, ScannedReceipt } from "../../types";
+import type { Category, Expense, ScannedReceipt } from "../../types";
+import { buildMerchantIndex, suggestCategory, suggestionLabel } from "../../lib/autoCategorize";
 import * as act from "../../db/actions";
 import { useToast } from "../../hooks/useToasts";
 
 export interface ReceiptPrefill {
   title: string; amount: string; date: string; merchant: string;
   categoryId: string; receiptPath: string; confidence: ScannedReceipt["confidence"];
+  business?: boolean; businessPct?: number; taxCategory?: string;
+  /** Where the category came from, shown to the user. */
+  categorySource?: string;
 }
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -14,8 +18,8 @@ const MAX_BYTES = 10 * 1024 * 1024;
 /** Snap a receipt → upload → extract → hand a pre-filled expense back for review.
  *  Nothing is ever saved automatically; OCR gets totals wrong often enough that
  *  silent entry would quietly corrupt the ledger. */
-export function ReceiptScanner({ categories, onScanned, style }:
-  { categories: Category[]; onScanned: (p: ReceiptPrefill) => void; style?: React.CSSProperties }) {
+export function ReceiptScanner({ categories, expenses = [], onScanned, style }:
+  { categories: Category[]; expenses?: Expense[]; onScanned: (p: ReceiptPrefill) => void; style?: React.CSSProperties }) {
   const toast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -35,14 +39,21 @@ export function ReceiptScanner({ categories, onScanned, style }:
     try {
       path = await act.uploadReceipt(file);
       const r = await act.scanReceipt(path);
+      // Your own history wins; then the built-in merchant table; then the
+      // model's category hint as a last resort.
+      const learned = suggestCategory(r.merchant, buildMerchantIndex(expenses), categories);
       onScanned({
         title: r.merchant || "Receipt",
         amount: r.total ? String(r.total) : "",
         date: /^\d{4}-\d{2}-\d{2}$/.test(r.date) ? r.date : "",
         merchant: r.merchant,
-        categoryId: matchCategory(r.categoryHint),
+        categoryId: learned.categoryId ?? matchCategory(r.categoryHint),
         receiptPath: path,
         confidence: r.confidence,
+        business: learned.business,
+        businessPct: learned.businessPct,
+        taxCategory: learned.taxCategory,
+        categorySource: suggestionLabel(learned),
       });
       if (r.confidence === "low") toast("Hard to read — double-check the amount and date", "brass");
       else if (!r.total) toast("Couldn't find a total — enter it manually", "brass");

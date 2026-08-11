@@ -3,6 +3,7 @@ import { Upload, AlertTriangle, Check } from "lucide-react";
 import { Modal, Field, Empty } from "../../components/ui";
 import type { Category, Expense } from "../../types";
 import { SCHEDULE_C } from "../../lib/tax";
+import { buildMerchantIndex, suggestCategory } from "../../lib/autoCategorize";
 import { money } from "../../lib/money";
 import {
   parseCsv, detectColumns, looksLikeHeader, buildRows, markDuplicates,
@@ -47,6 +48,24 @@ export function ImportModal({ categories, existing, businessMode, onClose }:
     return markDuplicates(built, existing);
   }, [dataRows, map, flipSign, existing]);
 
+  // Each row gets its own category from history/rules; the dropdown below is
+  // only the fallback for rows nothing recognises.
+  const merchantIndex = useMemo(() => buildMerchantIndex(existing), [existing]);
+  const resolved = useMemo(() => rows.map((r) => {
+    if (r.error) return { row: r, categoryId: categoryId, taxCategory: undefined as string | undefined, business: false, auto: false };
+    const s = suggestCategory(cleanDescription(r.description), merchantIndex, categories);
+    return {
+      row: r,
+      categoryId: s.categoryId ?? categoryId,
+      taxCategory: asBusiness ? (s.taxCategory ?? (taxCategory || undefined)) : undefined,
+      business: asBusiness,
+      auto: Boolean(s.categoryId),
+    };
+  }), [rows, merchantIndex, categories, categoryId, asBusiness, taxCategory]);
+
+  const byIndex = useMemo(() => new Map(resolved.map((x) => [x.row.index, x])), [resolved]);
+  const autoCount = resolved.filter((x) => x.auto && !x.row.error).length;
+
   const effective = rows.map((r) => ({ ...r, include: overrides[r.index] ?? r.include }));
   const selected = effective.filter((r) => r.include && !r.error);
   const dupes = rows.filter((r) => r.duplicate).length;
@@ -61,16 +80,19 @@ export function ImportModal({ categories, existing, businessMode, onClose }:
     if (selected.length === 0) return;
     setBusy(true);
     try {
-      const n = await act.bulkAddExpenses(selected.map((r) => ({
-        title: cleanDescription(r.description) || "Imported transaction",
-        amount: r.amount,
-        categoryId,
-        date: r.date,
-        merchant: cleanDescription(r.description) || undefined,
-        business: asBusiness,
-        businessPct: 100,
-        taxCategory: asBusiness ? (taxCategory || undefined) : undefined,
-      })));
+      const n = await act.bulkAddExpenses(selected.map((r) => {
+        const res = byIndex.get(r.index);
+        return {
+          title: cleanDescription(r.description) || "Imported transaction",
+          amount: r.amount,
+          categoryId: res?.categoryId ?? categoryId,
+          date: r.date,
+          merchant: cleanDescription(r.description) || undefined,
+          business: asBusiness,
+          businessPct: 100,
+          taxCategory: res?.taxCategory,
+        };
+      }));
       toast(`Imported ${n} transaction${n === 1 ? "" : "s"}`);
       onClose();
     } catch (e) {
@@ -117,7 +139,7 @@ export function ImportModal({ categories, existing, businessMode, onClose }:
             ) : (
               <ColSelect label="Amount" value={map!.amount} onChange={(v) => setCol("amount", v)} allowNone />
             )}
-            <Field label="Category for all">
+            <Field label="Category for unmatched rows">
               <select className="gl-select" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
@@ -162,6 +184,7 @@ export function ImportModal({ categories, existing, businessMode, onClose }:
 
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 12.5, color: "var(--dim)", margin: "12px 0 6px" }}>
             <span><strong style={{ color: "var(--fern)" }}>{selected.length}</strong> to import · {money(total)}</span>
+            {autoCount > 0 && <span style={{ color: "var(--fern)" }}>{autoCount} auto-categorized</span>}
             {dupes > 0 && <span>{dupes} already recorded</span>}
             {credits > 0 && <span>{credits} money-in (skipped)</span>}
             {errors > 0 && <span style={{ color: "var(--clay)" }}>{errors} unreadable</span>}
@@ -170,7 +193,7 @@ export function ImportModal({ categories, existing, businessMode, onClose }:
           <div style={{ maxHeight: 300, overflowY: "auto", border: "1px solid var(--line)", borderRadius: 9 }}>
             {effective.length === 0 ? <Empty text="No rows found." /> : (
               <table className="gl-table" style={{ margin: 0 }}>
-                <thead><tr><th style={{ width: 32 }} /><th>Date</th><th>Description</th><th style={{ textAlign: "right" }}>Amount</th></tr></thead>
+                <thead><tr><th style={{ width: 32 }} /><th>Date</th><th>Description</th><th>Category</th><th style={{ textAlign: "right" }}>Amount</th></tr></thead>
                 <tbody>
                   {effective.map((r) => (
                     <tr key={r.index} style={{ opacity: r.error ? 0.5 : 1 }}>
@@ -185,6 +208,10 @@ export function ImportModal({ categories, existing, businessMode, onClose }:
                         {r.duplicate && <span style={{ fontSize: 10.5, color: "var(--brass)", marginLeft: 6 }}>already recorded</span>}
                         {r.isCredit && !r.error && <span style={{ fontSize: 10.5, color: "var(--fern)", marginLeft: 6 }}>money in</span>}
                         {r.error && <span style={{ fontSize: 10.5, color: "var(--clay)", marginLeft: 6 }}>{r.error}</span>}
+                      </td>
+                      <td style={{ fontSize: 12, color: "var(--dim)", whiteSpace: "nowrap" }}>
+                        {r.error ? "—" : (categories.find((c) => c.id === byIndex.get(r.index)?.categoryId)?.name ?? "—")}
+                        {byIndex.get(r.index)?.auto && <span style={{ color: "var(--fern)", marginLeft: 4 }}>auto</span>}
                       </td>
                       <td className="gl-mono" style={{ textAlign: "right", fontWeight: 600 }}>
                         {r.error ? "—" : money(r.amount)}

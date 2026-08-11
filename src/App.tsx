@@ -261,7 +261,7 @@ export default function App() {
               </p>
               <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
                 <button className="gl-btn primary" style={{ fontSize: 12 }} onClick={() => setModal({ type: "expense", date: defaultExpenseDate })}><Plus size={13} /> Expense</button>
-                <ReceiptScanner categories={categories} style={{ fontSize: 12 }}
+                <ReceiptScanner categories={categories} expenses={expenses} style={{ fontSize: 12 }}
                   onScanned={(p) => setModal({ type: "expense", prefill: p, date: p.date || defaultExpenseDate })} />
                 <button className="gl-btn" style={{ fontSize: 12 }} onClick={() => setModal({ type: "bill" })}><Plus size={13} /> Bill</button>
                 <button className="gl-btn" style={{ fontSize: 12 }} onClick={() => setModal({ type: "income" })}><Plus size={13} /> Income</button>
@@ -289,7 +289,7 @@ export default function App() {
         </>
       )}
       {tab === "expenses" && (
-        <ExpensesView month={month} categories={categories} search={q}
+        <ExpensesView month={month} categories={categories} allExpenses={expenses} search={q}
           onAdd={() => setModal({ type: "expense", date: defaultExpenseDate })}
           onEdit={(e) => setModal({ type: "expense", data: e })}
           onScanned={(p) => setModal({ type: "expense", prefill: p, date: p.date || defaultExpenseDate })}
@@ -298,7 +298,11 @@ export default function App() {
       )}
       {tab === "receipts" && (
         <ReceiptVault expenses={expenses} categories={categories} businessMode={settings.businessMode}
-          onEdit={(e) => setModal({ type: "expense", data: e })} />
+          onEdit={(e) => setModal({ type: "expense", data: e })}
+          onFile={(path) => setModal({ type: "expense", date: defaultExpenseDate, prefill: {
+            title: "", amount: "", date: "", merchant: "", categoryId: categories[0]?.id ?? "",
+            receiptPath: path, confidence: "low",
+          } })} />
       )}
       {tab === "mileage" && settings.businessMode && (
         <MileageView entries={mileage} settings={settings} year={view.y}

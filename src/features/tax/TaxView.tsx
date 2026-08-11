@@ -1,10 +1,12 @@
-import { useMemo } from "react";
-import { Download, AlertTriangle, Info } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Download, AlertTriangle, Info, Loader2, FileSpreadsheet, CalendarClock } from "lucide-react";
 import type { AppData } from "../../types";
 import { ViewHeader, Empty, Stat } from "../../components/ui";
 import { money } from "../../lib/money";
-import { taxSummary, quarterlyDueDates, mileageCsvRows } from "../../lib/tax";
-import { toCsv } from "../../lib/csv";
+import { taxSummary, quarterlyDueDates } from "../../lib/tax";
+import { buildTaxPackage, receiptManifest } from "../../lib/taxPackage";
+import { createZip, textBytes, type ZipEntry } from "../../lib/zip";
+import { downloadReceipt } from "../../db/actions";
 import { useToast } from "../../hooks/useToasts";
 
 /** Schedule C picture for the year: what you earned, what's deductible, what to set aside. */
@@ -14,33 +16,55 @@ export function TaxView({ data, year }: { data: AppData; year: number }) {
   const quarters = quarterlyDueDates(year);
   const today = new Date().toISOString().slice(0, 10);
 
-  const exportPackage = () => {
-    const rows: (string | number)[][] = [
-      [`Greenline tax summary — ${year}`, ""],
-      [data.settings.businessName || "Self-employment", ""],
-      ["", ""],
-      ["Business income", s.businessIncome.toFixed(2)],
-      ["", ""],
-      ["Schedule C line", "Description", "Gross", "Deductible", "Count"],
-      ...s.lines.map((l) => [l.line, l.label, l.gross.toFixed(2), l.deductible.toFixed(2), l.count]),
-      ["9", "Mileage (standard rate)", "", s.mileageDeduction.toFixed(2), s.miles],
-      ["", ""],
-      ["Total deductions", s.totalDeductions.toFixed(2)],
-      ["Net profit", s.netProfit.toFixed(2)],
-      ["Estimated self-employment tax", s.selfEmploymentTax.toFixed(2)],
-      ["", ""],
-      ["NOTE", "Estimates for planning only — not tax advice or a filed return."],
-      ["", ""],
-      ["Mileage log", ""],
-      ...mileageCsvRows(data.mileage.filter((m) => m.date.startsWith(String(year))), data.settings.mileageRate),
-    ];
-    const blob = new Blob([toCsv(rows)], { type: "text/csv" });
+  const [exporting, setExporting] = useState(false);
+  const [progress, setProgress] = useState("");
+
+  /** Builds the CPA package: summary, itemized ledger, income, mileage, and every receipt image. */
+  const exportPackage = async () => {
+    setExporting(true);
+    try {
+      const files = buildTaxPackage(data, year);
+      const entries: ZipEntry[] = files.map((f) => ({ name: f.name, data: textBytes(f.content) }));
+
+      const receipts = receiptManifest(data, year);
+      let missing = 0;
+      for (let i = 0; i < receipts.length; i++) {
+        setProgress(`Adding receipt ${i + 1} of ${receipts.length}…`);
+        const bytes = await downloadReceipt(receipts[i].path);
+        if (bytes) entries.push({ name: receipts[i].name, data: bytes });
+        else missing++;
+      }
+      if (missing > 0) {
+        entries.push({
+          name: "receipts/MISSING.txt",
+          data: textBytes(`${missing} receipt image(s) could not be retrieved and are absent from this archive.\n`),
+        });
+      }
+
+      setProgress("Building archive…");
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(createZip(entries));
+      a.download = `greenline-tax-${year}${data.settings.businessName ? `-${data.settings.businessName.replace(/\W+/g, "-")}` : ""}.zip`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast(`Tax package downloaded — ${receipts.length - missing} receipt${receipts.length - missing === 1 ? "" : "s"} included`);
+    } catch (e) {
+      toast((e as Error).message || "Export failed", "clay");
+    } finally {
+      setExporting(false);
+      setProgress("");
+    }
+  };
+
+  /** Just the numbers, for a quick look without the images. */
+  const exportSummaryOnly = () => {
+    const blob = new Blob([buildTaxPackage(data, year)[1].content], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `greenline-tax-${year}.csv`;
+    a.download = `greenline-tax-summary-${year}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
-    toast("Tax summary downloaded");
+    toast("Summary downloaded");
   };
 
   const nothingYet = s.businessIncome === 0 && s.totalDeductions === 0 && s.needsReview === 0;
@@ -103,14 +127,41 @@ export function TaxView({ data, year }: { data: AppData; year: number }) {
               </table>
             </div>
 
-            <div style={{ padding: "12px 14px" }}>
-              <button className="gl-btn primary" style={{ fontSize: 12 }} onClick={exportPackage}>
-                <Download size={13} /> Export for my accountant
+            <div style={{ padding: "12px 14px", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <button className="gl-btn primary" style={{ fontSize: 12 }} disabled={exporting} onClick={exportPackage}>
+                {exporting ? <Loader2 size={13} className="gl-spin" /> : <Download size={13} />}
+                {exporting ? "Preparing…" : "Export full package for my accountant"}
               </button>
+              <button className="gl-btn" style={{ fontSize: 12 }} disabled={exporting} onClick={exportSummaryOnly}>
+                <FileSpreadsheet size={13} /> Summary only
+              </button>
+              {progress && <span style={{ fontSize: 12, color: "var(--dim)" }}>{progress}</span>}
             </div>
+            <p style={{ fontSize: 11.5, color: "var(--dim)", padding: "0 14px 14px", margin: 0 }}>
+              The full package is a .zip containing a summary, an itemized ledger with every business
+              transaction dated and categorized, income detail, your mileage log, and every scanned
+              receipt image named to match its row.
+            </p>
           </>
         )}
       </div>
+
+      {(() => {
+        const next = quarters.find((q) => q.due >= today);
+        if (!next) return null;
+        const days = Math.round((new Date(next.due).getTime() - new Date(today).getTime()) / 86400000);
+        if (days > 30) return null;
+        return (
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "10px 12px", borderRadius: 9,
+            background: "var(--brass-soft)" }}>
+            <CalendarClock size={15} color="var(--brass)" style={{ flexShrink: 0, marginTop: 1 }} />
+            <div style={{ fontSize: 12.5 }}>
+              <strong>{next.label} estimated tax is due {next.due}</strong> ({days === 0 ? "today" : `in ${days} day${days === 1 ? "" : "s"}`}).
+              {s.selfEmploymentTax > 0 && ` Your year-to-date SE estimate is ${money(s.selfEmploymentTax)}.`}
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="gl-card" style={{ padding: 16 }}>
         <div className="gl-display" style={{ fontSize: 15, marginBottom: 4 }}>Estimated tax due dates</div>

@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { Search, FileText, ExternalLink, Briefcase, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Search, FileText, ExternalLink, Briefcase, X, FilePlus2, Trash2 } from "lucide-react";
 import type { Category, Expense } from "../../types";
 import { ViewHeader, Empty } from "../../components/ui";
 import { money } from "../../lib/money";
 import { TAX_LINE_BY_ID } from "../../lib/tax";
-import { receiptUrl } from "../../db/actions";
+import { receiptUrl, listReceiptFiles, deleteReceiptFile } from "../../db/actions";
 import { useToast } from "../../hooks/useToasts";
 
 /**
@@ -12,13 +12,35 @@ import { useToast } from "../../hooks/useToasts";
  * later" half of receipt scanning. Images stay private; each view mints a
  * short-lived signed URL rather than exposing a public link.
  */
-export function ReceiptVault({ expenses, categories, businessMode, onEdit }:
-  { expenses: Expense[]; categories: Category[]; businessMode: boolean; onEdit: (e: Expense) => void }) {
+export function ReceiptVault({ expenses, categories, businessMode, onEdit, onFile }:
+  { expenses: Expense[]; categories: Category[]; businessMode: boolean;
+    onEdit: (e: Expense) => void; onFile: (path: string) => void }) {
   const toast = useToast();
   const [q, setQ] = useState("");
   const [year, setYear] = useState("all");
   const [scope, setScope] = useState<"all" | "business" | "personal">("all");
   const [viewing, setViewing] = useState<{ expense: Expense; url: string } | null>(null);
+  const [unfiled, setUnfiled] = useState<{ path: string; createdAt: string }[]>([]);
+
+  // Receipts uploaded but never attached to an expense — e.g. scanned in a batch
+  // to file later, or a form closed before saving. Surfaced so nothing is lost.
+  const refreshUnfiled = useCallback(async () => {
+    const files = await listReceiptFiles();
+    const used = new Set(expenses.map((e) => e.receiptPath).filter(Boolean) as string[]);
+    setUnfiled(files.filter((f) => !used.has(f.path)));
+  }, [expenses]);
+  useEffect(() => { refreshUnfiled(); }, [refreshUnfiled]);
+
+  const viewUnfiled = async (path: string) => {
+    const url = await receiptUrl(path);
+    if (url) window.open(url, "_blank", "noopener,noreferrer");
+    else toast("Couldn't open that receipt", "clay");
+  };
+
+  const discard = async (path: string) => {
+    try { await deleteReceiptFile(path); await refreshUnfiled(); toast("Receipt deleted"); }
+    catch { toast("Couldn't delete that receipt", "clay"); }
+  };
 
   const withReceipts = useMemo(
     () => expenses.filter((e) => e.receiptPath).sort((a, b) => b.date.localeCompare(a.date)),
@@ -56,6 +78,31 @@ export function ReceiptVault({ expenses, categories, businessMode, onEdit }:
     <div className="gl-card">
       <ViewHeader title="Receipts"
         sub={`${withReceipts.length} scanned receipt${withReceipts.length === 1 ? "" : "s"} on file`} />
+
+      {unfiled.length > 0 && (
+        <div style={{ margin: "0 14px 12px", padding: "10px 12px", borderRadius: 9, background: "var(--brass-soft)" }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
+            {unfiled.length} unfiled receipt{unfiled.length === 1 ? "" : "s"}
+          </div>
+          <div style={{ fontSize: 11.5, color: "var(--dim)", marginBottom: 8 }}>
+            Scanned but not yet attached to an expense. File them so they appear in your records and tax package.
+          </div>
+          {unfiled.map((f) => (
+            <div key={f.path} style={{ display: "flex", gap: 6, alignItems: "center", padding: "4px 0" }}>
+              <FileText size={13} color="var(--brass)" style={{ flexShrink: 0 }} />
+              <span style={{ flex: 1, minWidth: 0, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {f.createdAt ? f.createdAt.slice(0, 10) : f.path.split("/").pop()}
+              </span>
+              <button className="gl-btn" style={{ padding: "3px 8px", fontSize: 11.5 }} onClick={() => viewUnfiled(f.path)}>View</button>
+              <button className="gl-btn primary" style={{ padding: "3px 8px", fontSize: 11.5 }} onClick={() => onFile(f.path)}>
+                <FilePlus2 size={11} /> File it
+              </button>
+              <button className="gl-icon-btn" style={{ width: 26, height: 26 }} aria-label="Delete unfiled receipt"
+                onClick={() => discard(f.path)}><Trash2 size={12} /></button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "0 14px 12px", alignItems: "center" }}>
         <div style={{ position: "relative", flex: "1 1 200px" }}>

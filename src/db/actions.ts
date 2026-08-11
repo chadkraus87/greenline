@@ -164,6 +164,38 @@ export const scanReceipt = async (path: string): Promise<ScannedReceipt> => {
   };
 };
 
+/** Every receipt image in the caller's own folder, newest first. */
+export const listReceiptFiles = async (): Promise<{ path: string; createdAt: string; size: number }[]> => {
+  const { data: u } = await supabase.auth.getUser();
+  const uid = u.user?.id;
+  if (!uid) return [];
+  const { data, error } = await supabase.storage.from("receipts").list(uid, {
+    limit: 1000, sortBy: { column: "created_at", order: "desc" },
+  });
+  if (error || !data) return [];
+  return data
+    .filter((f) => f.id) // skip folder placeholders
+    .map((f) => ({
+      path: `${uid}/${f.name}`,
+      createdAt: f.created_at ?? "",
+      size: (f.metadata as { size?: number } | null)?.size ?? 0,
+    }));
+};
+
+/** Removes a stored receipt image. Storage RLS confines this to your own folder. */
+export const deleteReceiptFile = async (path: string): Promise<void> => {
+  const { error } = await supabase.storage.from("receipts").remove([path]);
+  if (error) throw error;
+  done();
+};
+
+/** Downloads a stored receipt's bytes for bundling into the tax package. */
+export const downloadReceipt = async (path: string): Promise<Uint8Array | null> => {
+  const { data, error } = await supabase.storage.from("receipts").download(path);
+  if (error || !data) return null;
+  return new Uint8Array(await data.arrayBuffer());
+};
+
 /** Short-lived private URL for viewing a stored receipt. */
 export const receiptUrl = async (path: string): Promise<string | null> => {
   const { data } = await supabase.storage.from("receipts").createSignedUrl(path, 300);
