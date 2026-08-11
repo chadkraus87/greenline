@@ -187,6 +187,13 @@ Cash-runway forecast · buffer floor · sinking funds for irregular bills · deb
 budgets with rollover (envelope) and burn-rate pacing · 50/30/20 guide · tax set-aside on
 untaxed income · subscription/recurring audit · CSV export · encrypted backups.
 
+## Updates
+
+Greenline is a PWA, so the service worker serves it from cache — which means an
+open tab will happily keep running an old build. It checks for a new one hourly
+and whenever you return to the tab, then offers **Reload** rather than pulling
+the page out from under a half-typed expense.
+
 ## Deployment
 
 Vercel, auto-deploying from `master`. Two environment variables are required:

@@ -9,6 +9,7 @@ import { Root } from "./Root";
 import { ToastProvider } from "./hooks/useToasts";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AuthProvider } from "./auth/AuthProvider";
+import { UpdateBanner } from "./components/UpdateBanner";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -16,6 +17,8 @@ createRoot(document.getElementById("root")!).render(
       <AuthProvider>
         <ToastProvider>
           <Root />
+          {/* Outside Root so it shows on the sign-in and pending screens too. */}
+          <UpdateBanner />
         </ToastProvider>
       </AuthProvider>
     </ErrorBoundary>

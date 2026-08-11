@@ -6,7 +6,13 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: "autoUpdate",
+      // "prompt", not "autoUpdate": autoUpdate silently serves the cached build
+      // to an already-open tab, so a long-lived tab can sit several releases
+      // behind with no signal. We register manually (see pwa/useAppUpdate.ts)
+      // and ask before reloading — a surprise reload mid-entry loses a
+      // half-typed expense.
+      registerType: "prompt",
+      injectRegister: null,
       includeAssets: ["icon.svg"],
       manifest: {
         name: "Greenline — Monthly Budget",
