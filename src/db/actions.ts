@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import type { Bill, CalendarShare, CalEvent, Category, Debt, Expense, Goal, IncomeSource, Mileage, ScannedReceipt, SharePermission, SinkingFund } from "../types";
+import type { Bill, CalendarShare, CalEvent, Category, Debt, Expense, Goal, IncomeSource, Mileage, ScannedReceipt, ScannedStatement, SharePermission, SinkingFund } from "../types";
 import { round2 } from "../lib/money";
 import { emitDataChange } from "../data/sync";
 
@@ -135,10 +135,9 @@ export const uploadReceipt = async (file: File): Promise<string> => {
   return path;
 };
 
-/** Runs OCR in the Edge Function (where the API key lives) and returns the
- *  extracted fields. Never saves anything — the user confirms first. */
-export const scanReceipt = async (path: string): Promise<ScannedReceipt> => {
-  const { data, error } = await supabase.functions.invoke("scan-receipt", { body: { path } });
+/** Calls the scanning Edge Function, surfacing its own error text on failure. */
+async function invokeScan(path: string, mode: "receipt" | "batch" | "statement") {
+  const { data, error } = await supabase.functions.invoke("scan-receipt", { body: { path, mode } });
   if (error) {
     // Supabase wraps non-2xx; surface the function's own message when present.
     const ctx = (error as { context?: Response }).context;
@@ -150,18 +149,28 @@ export const scanReceipt = async (path: string): Promise<ScannedReceipt> => {
     throw error;
   }
   if (!data?.ok) throw new Error(data?.error ?? "Scan failed");
-  const r = data.receipt ?? {};
+  return data as { receipt?: Record<string, unknown>; result?: unknown };
+}
+
+function normalizeReceipt(r: Record<string, unknown>): ScannedReceipt {
   return {
     merchant: String(r.merchant ?? ""),
     date: String(r.date ?? ""),
     total: Number(r.total) || 0,
     tax: Number(r.tax) || 0,
     categoryHint: String(r.category_hint ?? ""),
-    confidence: (["high", "medium", "low"].includes(r.confidence) ? r.confidence : "low") as ScannedReceipt["confidence"],
+    confidence: (["high", "medium", "low"].includes(String(r.confidence)) ? r.confidence : "low") as ScannedReceipt["confidence"],
     lineItems: Array.isArray(r.line_items)
-      ? r.line_items.map((li: Record<string, unknown>) => ({ description: String(li.description ?? ""), amount: Number(li.amount) || 0 }))
+      ? (r.line_items as Record<string, unknown>[]).map((li) => ({ description: String(li.description ?? ""), amount: Number(li.amount) || 0 }))
       : [],
   };
+}
+
+/** Runs OCR in the Edge Function (where the API key lives) and returns the
+ *  extracted fields. Never saves anything — the user confirms first. */
+export const scanReceipt = async (path: string): Promise<ScannedReceipt> => {
+  const data = await invokeScan(path, "receipt");
+  return normalizeReceipt((data.receipt ?? {}) as Record<string, unknown>);
 };
 
 /** Every receipt image in the caller's own folder, newest first. */
@@ -189,11 +198,60 @@ export const deleteReceiptFile = async (path: string): Promise<void> => {
   done();
 };
 
+/**
+ * Deletes receipt images and clears the link on their expenses, so no expense
+ * is ever left pointing at a file that no longer exists.
+ */
+export const purgeReceipts = async (items: { id: string; receiptPath: string }[]): Promise<number> => {
+  if (items.length === 0) return 0;
+  const CHUNK = 50;
+  let removed = 0;
+  for (let i = 0; i < items.length; i += CHUNK) {
+    const slice = items.slice(i, i + CHUNK);
+    const { error } = await supabase.storage.from("receipts").remove(slice.map((s) => s.receiptPath));
+    if (error) throw error;
+    const { error: upErr } = await table("expenses")
+      .update({ receipt_path: null })
+      .in("id", slice.map((s) => s.id));
+    if (upErr) throw upErr;
+    removed += slice.length;
+  }
+  done();
+  return removed;
+};
+
 /** Downloads a stored receipt's bytes for bundling into the tax package. */
 export const downloadReceipt = async (path: string): Promise<Uint8Array | null> => {
   const { data, error } = await supabase.storage.from("receipts").download(path);
   if (error || !data) return null;
   return new Uint8Array(await data.arrayBuffer());
+};
+
+/** Reads a bank/card statement PDF into a list of transactions for review. */
+export const scanStatement = async (path: string): Promise<ScannedStatement> => {
+  const data = await invokeScan(path, "statement");
+  const r = (data.result ?? {}) as Record<string, unknown>;
+  const txns = Array.isArray(r.transactions) ? r.transactions : [];
+  return {
+    accountLabel: String(r.account_label ?? ""),
+    periodStart: String(r.period_start ?? ""),
+    periodEnd: String(r.period_end ?? ""),
+    confidence: (["high", "medium", "low"].includes(String(r.confidence)) ? r.confidence : "low") as ScannedStatement["confidence"],
+    transactions: txns.map((x: Record<string, unknown>) => ({
+      date: String(x.date ?? ""),
+      description: String(x.description ?? ""),
+      amount: Math.abs(Number(x.amount) || 0),
+      direction: x.direction === "credit" ? "credit" : "debit",
+    })),
+  };
+};
+
+/** Reads a photo containing several receipts into separate entries. */
+export const scanReceiptBatch = async (path: string): Promise<ScannedReceipt[]> => {
+  const data = await invokeScan(path, "batch");
+  const list = Array.isArray((data.result as { receipts?: unknown[] })?.receipts)
+    ? (data.result as { receipts: Record<string, unknown>[] }).receipts : [];
+  return list.map(normalizeReceipt);
 };
 
 /** Short-lived private URL for viewing a stored receipt. */

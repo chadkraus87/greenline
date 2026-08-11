@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { Upload, AlertTriangle, Check } from "lucide-react";
+import { Upload, AlertTriangle, Check, FileText, Camera, Loader2 } from "lucide-react";
 import { Modal, Field, Empty } from "../../components/ui";
 import type { Category, Expense } from "../../types";
 import { SCHEDULE_C } from "../../lib/tax";
@@ -7,7 +7,7 @@ import { buildMerchantIndex, suggestCategory } from "../../lib/autoCategorize";
 import { money } from "../../lib/money";
 import {
   parseCsv, detectColumns, looksLikeHeader, buildRows, markDuplicates,
-  cleanDescription, type ColumnMap, type ImportRow,
+  cleanDescription, rowsFromTransactions, type ColumnMap, type ImportRow,
 } from "../../lib/csvImport";
 import * as act from "../../db/actions";
 import { useToast } from "../../hooks/useToasts";
@@ -26,6 +26,13 @@ export function ImportModal({ categories, existing, businessMode, onClose }:
   const [asBusiness, setAsBusiness] = useState(false);
   const [taxCategory, setTaxCategory] = useState("");
   const [busy, setBusy] = useState(false);
+  const [scanning, setScanning] = useState("");
+  /** Rows produced by a scan (statement or batch); bypasses column mapping. */
+  const [scannedRows, setScannedRows] = useState<ImportRow[] | null>(null);
+  const [scanNote, setScanNote] = useState("");
+  const [sourceReceipt, setSourceReceipt] = useState<string | undefined>();
+  const scanRef = useRef<HTMLInputElement>(null);
+  const [scanMode, setScanMode] = useState<"statement" | "batch">("statement");
 
   const readFile = async (file: File) => {
     try {
@@ -42,11 +49,39 @@ export function ImportModal({ categories, existing, businessMode, onClose }:
     }
   };
 
+  const runScan = async (file: File) => {
+    if (file.size > 10 * 1024 * 1024) return toast("That file is over 10 MB — try a smaller one.", "brass");
+    setScanning(scanMode === "statement" ? "Reading statement…" : "Reading receipts…");
+    try {
+      const path = await act.uploadReceipt(file);
+      if (scanMode === "statement") {
+        const st = await act.scanStatement(path);
+        if (st.transactions.length === 0) throw new Error("No transactions found in that statement.");
+        setScannedRows(rowsFromTransactions(st.transactions));
+        setScanNote(`${st.transactions.length} transactions${st.accountLabel ? ` from ${st.accountLabel}` : ""}`
+          + (st.confidence !== "high" ? ` · ${st.confidence} confidence — check the totals` : ""));
+        setSourceReceipt(undefined); // a statement isn't a receipt for any one expense
+      } else {
+        const list = await act.scanReceiptBatch(path);
+        if (list.length === 0) throw new Error("No receipts found in that photo.");
+        setScannedRows(rowsFromTransactions(list.map((r) => ({
+          date: r.date, description: r.merchant || "Receipt", amount: r.total, direction: "debit" as const,
+        }))));
+        setScanNote(`${list.length} receipt${list.length === 1 ? "" : "s"} found — check each amount`);
+        setSourceReceipt(path); // all of them came from this one image
+      }
+      setHeaders([]); setDataRows([]); setMap(null); setOverrides({});
+    } catch (e) {
+      toast((e as Error).message || "Scan failed", "clay");
+    } finally { setScanning(""); }
+  };
+
   const rows: ImportRow[] = useMemo(() => {
+    if (scannedRows) return markDuplicates(scannedRows, existing);
     if (!map) return [];
     const built = buildRows(dataRows, map, { purchasesArePositive: flipSign });
     return markDuplicates(built, existing);
-  }, [dataRows, map, flipSign, existing]);
+  }, [scannedRows, dataRows, map, flipSign, existing]);
 
   // Each row gets its own category from history/rules; the dropdown below is
   // only the fallback for rows nothing recognises.
@@ -72,7 +107,7 @@ export function ImportModal({ categories, existing, businessMode, onClose }:
   const credits = rows.filter((r) => r.isCredit && !r.error).length;
   const errors = rows.filter((r) => r.error).length;
   const total = selected.reduce((s, r) => s + r.amount, 0);
-  const mapOk = map && map.date >= 0 && (map.amount >= 0 || map.debit >= 0 || map.credit >= 0);
+  const mapOk = scannedRows ? true : Boolean(map && map.date >= 0 && (map.amount >= 0 || map.debit >= 0 || map.credit >= 0));
 
   const setCol = (k: keyof ColumnMap, v: number) => map && setMap({ ...map, [k]: v });
 
@@ -88,6 +123,7 @@ export function ImportModal({ categories, existing, businessMode, onClose }:
           categoryId: res?.categoryId ?? categoryId,
           date: r.date,
           merchant: cleanDescription(r.description) || undefined,
+          receiptPath: sourceReceipt,
           business: asBusiness,
           businessPct: 100,
           taxCategory: res?.taxCategory,
@@ -112,23 +148,46 @@ export function ImportModal({ categories, existing, businessMode, onClose }:
 
   return (
     <Modal title="Import from your bank" onClose={onClose} wide>
-      {headers.length === 0 ? (
+      {headers.length === 0 && !scannedRows ? (
         <>
           <p style={{ fontSize: 13, color: "var(--dim)", marginTop: 6 }}>
             Export a CSV of transactions from your bank or card, then choose it here. You'll see
             everything before anything is saved — Greenline matches the columns automatically and
             skips transactions you've already recorded.
           </p>
-          <button className="gl-btn primary" onClick={() => fileRef.current?.click()} style={{ marginTop: 8 }}>
-            <Upload size={14} /> Choose CSV file
-          </button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+            <button className="gl-btn primary" disabled={!!scanning} onClick={() => fileRef.current?.click()}>
+              <Upload size={14} /> Choose CSV file
+            </button>
+            <button className="gl-btn" disabled={!!scanning}
+              onClick={() => { setScanMode("statement"); setTimeout(() => scanRef.current?.click(), 0); }}>
+              {scanning === "Reading statement…" ? <Loader2 size={14} className="gl-spin" /> : <FileText size={14} />}
+              Scan a statement (PDF)
+            </button>
+            <button className="gl-btn" disabled={!!scanning}
+              onClick={() => { setScanMode("batch"); setTimeout(() => scanRef.current?.click(), 0); }}>
+              {scanning === "Reading receipts…" ? <Loader2 size={14} className="gl-spin" /> : <Camera size={14} />}
+              Photo of several receipts
+            </button>
+          </div>
+          {scanning && <div style={{ fontSize: 12.5, color: "var(--dim)", marginTop: 8 }}>{scanning} this can take a moment for a long statement.</div>}
           <input ref={fileRef} type="file" accept=".csv,text/csv" hidden
             onChange={(e) => { const f = e.target.files?.[0]; if (f) readFile(f); e.target.value = ""; }} />
+          <input ref={scanRef} type="file" accept={scanMode === "statement" ? "application/pdf,image/*" : "image/*"}
+            capture={scanMode === "batch" ? "environment" : undefined} hidden
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) runScan(f); e.target.value = ""; }} />
         </>
       ) : (
         <>
-          <div className="gl-label" style={{ marginTop: 8 }}>Which column is which?</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10 }}>
+          {scanNote && (
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 12px", borderRadius: 9,
+              background: "var(--fern-soft)", marginTop: 8, fontSize: 12.5 }}>
+              <FileText size={15} color="var(--fern)" style={{ flexShrink: 0, marginTop: 1 }} />
+              <div>Read from your document — {scanNote}. Nothing is saved until you import.</div>
+            </div>
+          )}
+          {!scannedRows && <div className="gl-label" style={{ marginTop: 8 }}>Which column is which?</div>}
+          {!scannedRows && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10 }}>
             <ColSelect label="Date" value={map!.date} onChange={(v) => setCol("date", v)} />
             <ColSelect label="Description" value={map!.description} onChange={(v) => setCol("description", v)} allowNone />
             {map!.debit >= 0 || map!.credit >= 0 ? (
@@ -144,7 +203,16 @@ export function ImportModal({ categories, existing, businessMode, onClose }:
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </Field>
-          </div>
+          </div>}
+          {scannedRows && (
+            <div style={{ maxWidth: 320, marginTop: 8 }}>
+              <Field label="Category for unmatched rows">
+                <select className="gl-select" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </Field>
+            </div>
+          )}
 
           {businessMode && (
             <div style={{ borderTop: "1px solid var(--line)", marginTop: 10, paddingTop: 10 }}>
@@ -168,7 +236,7 @@ export function ImportModal({ categories, existing, businessMode, onClose }:
             </div>
           )}
 
-          {map!.amount >= 0 && (
+          {!scannedRows && map!.amount >= 0 && (
             <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: "var(--dim)", marginTop: 8, cursor: "pointer" }}>
               <input type="checkbox" checked={flipSign} onChange={(e) => setFlipSign(e.target.checked)} />
               My purchases show as positive numbers

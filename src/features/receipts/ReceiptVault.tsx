@@ -12,9 +12,9 @@ import { useToast } from "../../hooks/useToasts";
  * later" half of receipt scanning. Images stay private; each view mints a
  * short-lived signed URL rather than exposing a public link.
  */
-export function ReceiptVault({ expenses, categories, businessMode, onEdit, onFile }:
+export function ReceiptVault({ expenses, categories, businessMode, onEdit, onFile, onUnfiledCount }:
   { expenses: Expense[]; categories: Category[]; businessMode: boolean;
-    onEdit: (e: Expense) => void; onFile: (path: string) => void }) {
+    onEdit: (e: Expense) => void; onFile: (path: string) => void; onUnfiledCount?: (n: number) => void }) {
   const toast = useToast();
   const [q, setQ] = useState("");
   const [year, setYear] = useState("all");
@@ -27,8 +27,10 @@ export function ReceiptVault({ expenses, categories, businessMode, onEdit, onFil
   const refreshUnfiled = useCallback(async () => {
     const files = await listReceiptFiles();
     const used = new Set(expenses.map((e) => e.receiptPath).filter(Boolean) as string[]);
-    setUnfiled(files.filter((f) => !used.has(f.path)));
-  }, [expenses]);
+    const orphans = files.filter((f) => !used.has(f.path));
+    setUnfiled(orphans);
+    onUnfiledCount?.(orphans.length);
+  }, [expenses, onUnfiledCount]);
   useEffect(() => { refreshUnfiled(); }, [refreshUnfiled]);
 
   const viewUnfiled = async (path: string) => {

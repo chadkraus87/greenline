@@ -25,6 +25,7 @@ import { IncomeForm, IncomeView } from "./features/income/IncomeFeature";
 import { ExpenseForm, ExpensesView } from "./features/expenses/ExpensesFeature";
 import { ReceiptScanner, type ReceiptPrefill } from "./features/expenses/ReceiptScanner";
 import { ImportModal } from "./features/expenses/ImportModal";
+import { BulkCategorizeModal, countCategorizable } from "./features/expenses/BulkCategorizeModal";
 import { BudgetsView, CategoryForm } from "./features/budgets/BudgetsView";
 import { GoalForm, GoalsView } from "./features/goals/GoalsFeature";
 import { DebtForm, DebtsView } from "./features/debts/DebtsFeature";
@@ -44,7 +45,7 @@ type ModalState =
   | { type: "debt"; data?: Debt } | { type: "sinking"; data?: SinkingFund }
   | { type: "category"; data?: Category }
   | { type: "backup" } | { type: "admin" } | { type: "sharing" } | { type: "import" }
-  | { type: "settings" } | { type: "mileage"; data?: Mileage } | null;
+  | { type: "settings" } | { type: "mileage"; data?: Mileage } | { type: "bulkcat" } | null;
 
 const BASE_TABS = [
   ["overview", "Overview", LayoutDashboard], ["bills", "Bills", Receipt],
@@ -90,6 +91,13 @@ export default function App() {
   const mileage = data?.mileage ?? [];
 
   useEffect(() => { document.documentElement.dataset.theme = settings.theme; }, [settings.theme]);
+
+  // Count of expenses the categorizer could improve, and receipts not yet filed.
+  const categorizable = useMemo(
+    () => countCategorizable(expenses, categories, settings.businessMode),
+    [expenses, categories, settings.businessMode]
+  );
+  const [unfiledCount, setUnfiledCount] = useState(0);
 
   const visibleTabs = settings.businessMode ? [...BASE_TABS, ...BUSINESS_TABS] : BASE_TABS;
 
@@ -290,6 +298,7 @@ export default function App() {
       )}
       {tab === "expenses" && (
         <ExpensesView month={month} categories={categories} allExpenses={expenses} search={q}
+          categorizable={categorizable} onBulkCategorize={() => setModal({ type: "bulkcat" })}
           onAdd={() => setModal({ type: "expense", date: defaultExpenseDate })}
           onEdit={(e) => setModal({ type: "expense", data: e })}
           onScanned={(p) => setModal({ type: "expense", prefill: p, date: p.date || defaultExpenseDate })}
@@ -299,6 +308,7 @@ export default function App() {
       {tab === "receipts" && (
         <ReceiptVault expenses={expenses} categories={categories} businessMode={settings.businessMode}
           onEdit={(e) => setModal({ type: "expense", data: e })}
+          onUnfiledCount={setUnfiledCount}
           onFile={(path) => setModal({ type: "expense", date: defaultExpenseDate, prefill: {
             title: "", amount: "", date: "", merchant: "", categoryId: categories[0]?.id ?? "",
             receiptPath: path, confidence: "low",
@@ -311,7 +321,7 @@ export default function App() {
       )}
       {tab === "tax" && settings.businessMode && (
         <Suspense fallback={<div style={{ color: "var(--dim)", padding: 20 }}>Loading…</div>}>
-          <TaxView data={{ settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts, mileage }} year={view.y} />
+          <TaxView data={{ settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts, mileage }} year={view.y} unfiledReceipts={unfiledCount} />
         </Suspense>
       )}
       {tab === "budgets" && (
@@ -363,7 +373,8 @@ export default function App() {
       {modal?.type === "backup" && <BackupModal onClose={() => setModal(null)} />}
       {modal?.type === "admin" && <AdminPanel onClose={() => setModal(null)} />}
       {modal?.type === "sharing" && <SharingModal onClose={() => setModal(null)} />}
-      {modal?.type === "settings" && <SettingsModal settings={settings} onClose={() => setModal(null)} />}
+      {modal?.type === "settings" && <SettingsModal settings={settings} expenses={expenses} onClose={() => setModal(null)} />}
+      {modal?.type === "bulkcat" && <BulkCategorizeModal expenses={expenses} categories={categories} businessMode={settings.businessMode} onClose={() => setModal(null)} />}
       {modal?.type === "mileage" && <MileageForm initial={modal.data} defaultDate={defaultExpenseDate} onClose={() => setModal(null)} />}
       {modal?.type === "import" && <ImportModal categories={categories} existing={expenses} businessMode={settings.businessMode} onClose={() => setModal(null)} />}
 

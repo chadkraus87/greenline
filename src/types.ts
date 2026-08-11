@@ -34,6 +34,16 @@ export interface Mileage {
   from?: string; to?: string;
 }
 
+/** One transaction read off a bank or card statement. */
+export interface ScannedTransaction {
+  date: string; description: string; amount: number; direction: "debit" | "credit";
+}
+export interface ScannedStatement {
+  accountLabel: string; periodStart: string; periodEnd: string;
+  confidence: "high" | "medium" | "low";
+  transactions: ScannedTransaction[];
+}
+
 /** Fields extracted from a receipt photo — always reviewed by a human before saving. */
 export interface ScannedReceipt {
   merchant: string; date: string; total: number; tax: number;

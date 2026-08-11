@@ -1,19 +1,23 @@
 import { useMemo, useState } from "react";
-import { Download, AlertTriangle, Info, Loader2, FileSpreadsheet, CalendarClock } from "lucide-react";
+import { Download, AlertTriangle, Info, Loader2, FileSpreadsheet, CalendarClock,
+  CheckCircle2, XCircle, TrendingUp, TrendingDown } from "lucide-react";
 import type { AppData } from "../../types";
 import { ViewHeader, Empty, Stat } from "../../components/ui";
 import { money } from "../../lib/money";
 import { taxSummary, quarterlyDueDates } from "../../lib/tax";
 import { buildTaxPackage, receiptManifest } from "../../lib/taxPackage";
+import { taxReadiness, compareYears } from "../../lib/taxReadiness";
 import { createZip, textBytes, type ZipEntry } from "../../lib/zip";
 import { downloadReceipt } from "../../db/actions";
 import { useToast } from "../../hooks/useToasts";
 
 /** Schedule C picture for the year: what you earned, what's deductible, what to set aside. */
-export function TaxView({ data, year }: { data: AppData; year: number }) {
+export function TaxView({ data, year, unfiledReceipts = 0 }: { data: AppData; year: number; unfiledReceipts?: number }) {
   const toast = useToast();
   const s = useMemo(() => taxSummary(data, year), [data, year]);
   const quarters = quarterlyDueDates(year);
+  const readiness = useMemo(() => taxReadiness(data, year, unfiledReceipts), [data, year, unfiledReceipts]);
+  const comparison = useMemo(() => compareYears(data, year), [data, year]);
   const today = new Date().toISOString().slice(0, 10);
 
   const [exporting, setExporting] = useState(false);
@@ -145,6 +149,88 @@ export function TaxView({ data, year }: { data: AppData; year: number }) {
           </>
         )}
       </div>
+
+      {!nothingYet && (
+        <div className="gl-card">
+          <ViewHeader title="Ready to file?"
+            sub={readiness.ready ? "Nothing outstanding" : `${readiness.issues.length} thing${readiness.issues.length === 1 ? "" : "s"} to look at`} />
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 14px 12px" }}>
+            <div className="gl-track" style={{ flex: 1 }}>
+              <div className="gl-fill" style={{ width: `${readiness.score}%`,
+                background: readiness.score >= 90 ? "var(--fern)" : readiness.score >= 60 ? "var(--brass)" : "var(--clay)" }} />
+            </div>
+            <span className="gl-mono" style={{ fontWeight: 600,
+              color: readiness.score >= 90 ? "var(--fern)" : readiness.score >= 60 ? "var(--brass)" : "var(--clay)" }}>
+              {readiness.score}
+            </span>
+          </div>
+          {readiness.issues.length === 0 ? (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "0 14px 16px", fontSize: 13 }}>
+              <CheckCircle2 size={16} color="var(--fern)" />
+              Everything is categorized, documented, and recorded. Export the package whenever you're ready.
+            </div>
+          ) : readiness.issues.map((i) => (
+            <div className="gl-row" key={i.id} style={{ alignItems: "flex-start" }}>
+              {i.level === "blocker" ? <XCircle size={15} color="var(--clay)" style={{ flexShrink: 0, marginTop: 2 }} />
+                : i.level === "warning" ? <AlertTriangle size={15} color="var(--brass)" style={{ flexShrink: 0, marginTop: 2 }} />
+                : <Info size={15} color="var(--dim)" style={{ flexShrink: 0, marginTop: 2 }} />}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 500, fontSize: 13.5 }}>
+                  {i.title}{i.count > 0 && <span style={{ color: "var(--dim)" }}> · {i.count}{i.amount ? ` · ${money(i.amount)}` : ""}</span>}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 1 }}>{i.detail}</div>
+                <div style={{ fontSize: 11.5, color: "var(--sky)", marginTop: 2 }}>→ {i.fix}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {(comparison.income.prior > 0 || comparison.deductions.prior > 0) && (
+        <div className="gl-card">
+          <ViewHeader title={`Compared with ${year - 1}`} sub="Big swings are worth a second look before filing" />
+          <div className="gl-stats" style={{ padding: "0 14px 12px" }}>
+            {([
+              ["Income", comparison.income],
+              ["Deductions", comparison.deductions],
+              ["Net profit", comparison.netProfit],
+            ] as const).map(([label, v]) => (
+              <div className="gl-card" key={label} style={{ padding: "10px 12px" }}>
+                <div style={{ fontSize: 11, color: "var(--dim)", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600 }}>{label}</div>
+                <div className="gl-mono" style={{ fontSize: 18, fontWeight: 600 }}>{money(v.current)}</div>
+                <div style={{ fontSize: 11.5, color: v.delta >= 0 ? "var(--fern)" : "var(--clay)", display: "flex", alignItems: "center", gap: 3 }}>
+                  {v.delta >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                  {money(Math.abs(v.delta))} vs {money(v.prior)}
+                </div>
+              </div>
+            ))}
+          </div>
+          {comparison.droppedLines.length > 0 && (
+            <div style={{ margin: "0 14px 12px", padding: "9px 12px", borderRadius: 9, background: "var(--brass-soft)", fontSize: 12.5 }}>
+              <strong>Claimed last year, nothing this year:</strong>{" "}
+              {comparison.droppedLines.map((l) => `${l.label} (${money(l.prior)})`).join(", ")}. Worth checking you haven't missed them.
+            </div>
+          )}
+          <div style={{ overflowX: "auto" }}>
+            <table className="gl-table">
+              <thead><tr><th>Category</th><th style={{ textAlign: "right" }}>{year}</th><th style={{ textAlign: "right" }}>{year - 1}</th><th style={{ textAlign: "right" }}>Change</th></tr></thead>
+              <tbody>
+                {comparison.lines.map((l) => (
+                  <tr key={l.id}>
+                    <td>{l.label}</td>
+                    <td className="gl-mono" style={{ textAlign: "right" }}>{money(l.current)}</td>
+                    <td className="gl-mono" style={{ textAlign: "right", color: "var(--dim)" }}>{money(l.prior)}</td>
+                    <td className="gl-mono" style={{ textAlign: "right", color: l.delta >= 0 ? "var(--fern)" : "var(--clay)" }}>
+                      {l.delta >= 0 ? "+" : "−"}{money(Math.abs(l.delta))}
+                      {l.changePct !== null && <span style={{ color: "var(--dim)", fontSize: 11 }}> ({l.changePct > 0 ? "+" : ""}{l.changePct}%)</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {(() => {
         const next = quarters.find((q) => q.due >= today);

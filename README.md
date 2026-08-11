@@ -120,7 +120,18 @@ supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 
 Roughly 1–2¢ per receipt. Capped at 40 scans/user/hour.
 
-## Bank / card CSV import
+## Importing transactions
+
+Expenses tab → **Import / scan statement**. Three sources feed one review screen:
+
+| Source | What happens |
+|---|---|
+| **CSV file** | Parsed and column-mapped (auto-detected, you confirm) |
+| **Statement PDF** | Read by Claude into a transaction list — for banks whose CSV export is poor |
+| **Photo of several receipts** | Split into separate expenses, all linked to the source image |
+
+Every row is categorized individually from your own history, shown with an `auto` badge,
+and nothing is written until you confirm.
 
 Expenses tab → **Import bank CSV**. Works with any bank: the parser handles quoted fields,
 `$1,234.56`, accounting negatives `(12.34)`, European decimals, and several date formats,
@@ -135,6 +146,10 @@ You confirm the mapping and review every row before anything is written.
 `docs/sample-bank-export.csv` is a realistic file for trying it out.
 
 ## Self-employment (optional)
+
+The **Tax** tab includes a readiness check (uncategorized spend, missing receipts,
+income not marked received), a prior-year comparison that flags deductions claimed
+last year but not this one, and a full export package for a preparer.
 
 Off by default. Turn on **Settings → I have self-employment income** and the app adds:
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pencil, Trash2, ScanLine, Upload, Briefcase } from "lucide-react";
+import { Pencil, Trash2, ScanLine, Upload, Briefcase, Wand2 } from "lucide-react";
 import type { Category, Expense, MonthModel } from "../../types";
 import { Modal, Field, FormActions, ViewHeader, Empty } from "../../components/ui";
 import { money, num, sanitize } from "../../lib/money";
@@ -113,9 +113,10 @@ export function ExpenseForm({ initial, categories, defaultDate, prefill, busines
   );
 }
 
-export function ExpensesView({ month, categories, allExpenses, search, onAdd, onEdit, onScanned, onImport, onUndoable }:
+export function ExpensesView({ month, categories, allExpenses, search, onAdd, onEdit, onScanned, onImport, onUndoable, categorizable = 0, onBulkCategorize }:
   { month: MonthModel; categories: Category[]; allExpenses: Expense[]; search: string; onAdd: () => void; onEdit: (e: Expense) => void;
-    onScanned: (p: ReceiptPrefill) => void; onImport: () => void; onUndoable: (label: string, undo: act.UndoFn | null) => void }) {
+    onScanned: (p: ReceiptPrefill) => void; onImport: () => void; onUndoable: (label: string, undo: act.UndoFn | null) => void;
+    categorizable?: number; onBulkCategorize?: () => void }) {
   const list = month.expenses
     .filter((e) => `${e.title} ${e.merchant ?? ""} ${e.notes ?? ""}`.toLowerCase().includes(search))
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -125,8 +126,13 @@ export function ExpensesView({ month, categories, allExpenses, search, onAdd, on
       <div style={{ padding: "0 14px 10px", display: "flex", gap: 8, flexWrap: "wrap" }}>
         <ReceiptScanner categories={categories} expenses={allExpenses} onScanned={onScanned} style={{ fontSize: 12 }} />
         <button className="gl-btn" style={{ fontSize: 12 }} onClick={onImport}>
-          <Upload size={13} /> Import bank CSV
+          <Upload size={13} /> Import / scan statement
         </button>
+        {categorizable > 0 && onBulkCategorize && (
+          <button className="gl-btn" style={{ fontSize: 12 }} onClick={onBulkCategorize}>
+            <Wand2 size={13} /> Auto-categorize {categorizable}
+          </button>
+        )}
       </div>
       {list.length === 0 && <Empty text="No expenses logged this month." />}
       {list.length > 0 && (

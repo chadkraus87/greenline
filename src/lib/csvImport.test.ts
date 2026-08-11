@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   parseCsv, parseAmount, parseDate, detectColumns, looksLikeHeader,
-  buildRows, markDuplicates, cleanDescription,
+  buildRows, markDuplicates, cleanDescription, rowsFromTransactions,
 } from "./csvImport";
 import type { Expense } from "../types";
 
@@ -164,5 +164,35 @@ describe("cleanDescription", () => {
   });
   it("never returns an empty string", () => {
     expect(cleanDescription("POS DEBIT")).toBe("POS DEBIT");
+  });
+});
+
+describe("rowsFromTransactions (scanned statements)", () => {
+  it("includes debits as spending and excludes credits by default", () => {
+    const rows = rowsFromTransactions([
+      { date: "2026-08-01", description: "Shell Oil", amount: 41.15, direction: "debit" },
+      { date: "2026-08-05", description: "Payroll", amount: 2400, direction: "credit" },
+    ]);
+    expect(rows[0]).toMatchObject({ amount: 41.15, isCredit: false, include: true });
+    expect(rows[1]).toMatchObject({ amount: 2400, isCredit: true, include: false });
+  });
+
+  it("normalises a negative amount rather than trusting the sign", () => {
+    const [r] = rowsFromTransactions([{ date: "2026-08-01", description: "X", amount: -20, direction: "debit" }]);
+    expect(r.amount).toBe(20);
+  });
+
+  it("keeps unusable rows visible with a reason", () => {
+    const rows = rowsFromTransactions([
+      { date: "not a date", description: "X", amount: 5, direction: "debit" },
+      { date: "2026-08-01", description: "Y", amount: 0, direction: "debit" },
+    ]);
+    expect(rows.map((r) => r.error)).toEqual(["Unreadable date", "Zero amount"]);
+    expect(rows.every((r) => !r.include)).toBe(true);
+  });
+
+  it("normalises statement dates into ISO form", () => {
+    const [r] = rowsFromTransactions([{ date: "08/01/2026", description: "X", amount: 5, direction: "debit" }]);
+    expect(r.date).toBe("2026-08-01");
   });
 });

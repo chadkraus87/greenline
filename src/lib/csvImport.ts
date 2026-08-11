@@ -200,6 +200,21 @@ export function buildRows(dataRows: string[][], map: ColumnMap, opts: BuildOptio
   return out;
 }
 
+/** Converts scanned statement transactions into the same review rows CSV produces. */
+export function rowsFromTransactions(
+  txns: { date: string; description: string; amount: number; direction: "debit" | "credit" }[],
+): ImportRow[] {
+  return txns.map((t, index) => {
+    const date = parseDate(t.date);
+    const amount = Math.abs(Number(t.amount) || 0);
+    const base = { index, date: date ?? "", description: (t.description ?? "").trim(), duplicate: false };
+    if (!date) return { ...base, amount: 0, isCredit: false, include: false, error: "Unreadable date" };
+    if (!amount) return { ...base, amount: 0, isCredit: false, include: false, error: "Zero amount" };
+    const isCredit = t.direction === "credit";
+    return { ...base, amount: round2(amount), isCredit, include: !isCredit };
+  });
+}
+
 // --- Duplicate detection -------------------------------------------------
 
 const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
