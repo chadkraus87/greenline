@@ -91,7 +91,12 @@ export function EventForm({ initial, defaultDate, writableCalendars = [], onClos
           </select>
         </Field>
       )}
-      <Field label="Notes"><input className="gl-input" value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></Field>
+      <Field label="Notes">
+        <input className="gl-input" value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} />
+      </Field>
+      <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 4 }}>
+        Title and notes are visible to anyone you share this calendar with.
+      </div>
       <FormActions onCancel={onClose} onSave={save} saveLabel={initial ? "Save changes" : "Add event"} disabled={!f.title.trim() || !f.date} />
     </Modal>
   );
@@ -144,6 +149,7 @@ export function DayDetail({ date, month, myId, ownerEmailById, onClose, onAddExp
             <CalendarDays size={15} color={e.color} />
             <div style={{ flex: 1, minWidth: 0 }}>
               {e.title}
+              {e.notes && <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 1 }}>{e.notes}</div>}
               {shared && (
                 <div style={{ fontSize: 11, color: "var(--sky)" }}>
                   shared · {ownerEmailById?.get(e.ownerId!) ?? "another calendar"}
