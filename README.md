@@ -194,6 +194,17 @@ open tab will happily keep running an old build. It checks for a new one hourly
 and whenever you return to the tab, then offers **Reload** rather than pulling
 the page out from under a half-typed expense.
 
+The worker activates as soon as it installs (`skipWaiting`). Letting it wait is
+the usual advice, but it strands anyone whose page predates the banner: nothing
+on that page can activate the waiting worker, so reloading never recovers it —
+only closing every tab does. Activating immediately means a stale client is
+always one reload from healthy, and the banner is what prevents the silent-stale
+problem instead.
+
+The worker is registered with plain browser APIs, not `registerSW()` from
+`virtual:pwa-register` — that helper keeps state we can't see and installs its
+own `controlling -> location.reload()` listener, which reloads the page unasked.
+
 ## Deployment
 
 Vercel, auto-deploying from `master`. Two environment variables are required:

@@ -12,17 +12,38 @@ import useAppUpdate from "../pwa/useAppUpdate.ts?raw";
  */
 
 describe("stale-build prompt", () => {
-  it("uses the prompt strategy, not autoUpdate", () => {
-    // autoUpdate hands the cached build to an open tab and never says a word.
-    expect(viteConfig).toMatch(/registerType:\s*"prompt"/);
-    expect(viteConfig).not.toMatch(/registerType:\s*"autoUpdate"/);
+  it("opts out of the plugin's own registration script", () => {
+    // That script is what silently served the cached build to an open tab and
+    // never said a word about it.
+    expect(viteConfig).toMatch(/injectRegister:\s*null/);
   });
 
   it("registers the worker from app code so it can surface the prompt", () => {
     // The auto-injected registerSW.js has no hook to tell the UI anything.
     expect(viteConfig).toMatch(/injectRegister:\s*null/);
-    expect(useAppUpdate).toMatch(/from "virtual:pwa-register"/);
-    expect(useAppUpdate).toMatch(/onNeedRefresh/);
+    expect(useAppUpdate).toMatch(/navigator\.serviceWorker\.register\(/);
+  });
+
+  it("does not use registerSW(), which reloads the page behind our back", () => {
+    // virtual:pwa-register installs a "controlling -> location.reload()"
+    // listener. With skipWaiting that fires on its own and yanks the page away
+    // mid-entry — the exact thing this banner exists to avoid.
+    // Matches the import specifically — the comment above explains why we
+    // avoid it, and should not itself trip the check.
+    expect(useAppUpdate).not.toMatch(/from "virtual:pwa-register"/);
+  });
+
+  it("activates on install so a stale client is never stranded", () => {
+    // Letting the worker WAIT strands anyone whose page predates the banner:
+    // nothing on that page can activate it, so no amount of reloading helps.
+    expect(viteConfig).toMatch(/skipWaiting:\s*true/);
+    expect(viteConfig).toMatch(/clientsClaim:\s*true/);
+  });
+
+  it("only announces an update when a worker was already in charge", () => {
+    // clientsClaim fires controllerchange on a first visit too; without this
+    // guard every new visitor is told a new version is ready.
+    expect(useAppUpdate).toMatch(/hadControllerAtLoad/);
   });
 
   it("holds the registration at module scope, not per-component", () => {

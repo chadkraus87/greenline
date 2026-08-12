@@ -6,11 +6,14 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      // "prompt", not "autoUpdate": autoUpdate silently serves the cached build
-      // to an already-open tab, so a long-lived tab can sit several releases
-      // behind with no signal. We register manually (see pwa/useAppUpdate.ts)
-      // and ask before reloading — a surprise reload mid-entry loses a
-      // half-typed expense.
+      // We register the worker ourselves (see pwa/useAppUpdate.ts) and show a
+      // banner rather than reloading unasked — a surprise reload mid-entry
+      // loses a half-typed expense. injectRegister: null keeps the plugin from
+      // also injecting its own registration script.
+      //
+      // registerType has no effect while injectRegister is null; it only
+      // shapes the script we're opting out of. Left as "prompt" to state the
+      // intent, not because it does anything.
       registerType: "prompt",
       injectRegister: null,
       includeAssets: ["icon.svg"],
@@ -29,7 +32,16 @@ export default defineConfig({
       },
       workbox: {
         // Fonts are self-hosted (woff2) and precached below — no runtime font cache needed.
-        globPatterns: ["**/*.{js,css,html,svg,woff2}"]
+        globPatterns: ["**/*.{js,css,html,svg,woff2}"],
+        // The new worker takes over as soon as it installs, and the page says so
+        // rather than reloading on its own.
+        //
+        // Letting it WAIT instead is the textbook choice, but it stranded people:
+        // a tab whose page code predates the banner has nothing that can ever
+        // activate the waiting worker, so no amount of reloading recovers it —
+        // only closing every tab does. Measured, not assumed.
+        skipWaiting: true,
+        clientsClaim: true
       }
     })
   ],

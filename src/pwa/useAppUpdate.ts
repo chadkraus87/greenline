@@ -1,34 +1,72 @@
 import { useCallback, useEffect, useState } from "react";
-import { registerSW } from "virtual:pwa-register";
 
 /** How often to ask the server whether a new build exists, while the tab is open. */
 const POLL_MS = 60 * 60 * 1000;
 /** If the new worker doesn't take control, reload anyway rather than hang. */
 const HANDOVER_TIMEOUT_MS = 3000;
+/** vite-plugin-pwa emits the worker here. */
+const SW_URL = "/sw.js";
 
 /*
- * Registration lives at module scope, not in the hook.
+ * Registered with plain browser APIs rather than registerSW() from
+ * virtual:pwa-register.
  *
- * registerSW() is not safe to call twice — the second call returns without
- * firing onRegisteredSW — and StrictMode mounts every effect twice. Holding
- * this per-component meant the surviving mount never received the
- * registration, so the update check silently did nothing.
+ * That helper carries state we can't see, and it cost us twice: it only fires
+ * onRegisteredSW for the first of StrictMode's two calls, and it quietly
+ * installs a "controlling -> location.reload()" listener that yanked the page
+ * out from under the user the moment the worker activated. The lifecycle we
+ * need here is four events long — owning it is cheaper than working around it.
  */
 let registration: ServiceWorkerRegistration | null = null;
 let started = false;
 let updateReady = false;
 const subscribers = new Set<() => void>();
 
+/*
+ * Whether a worker was already in charge when this page loaded.
+ *
+ * The worker claims clients as soon as it installs, which fires
+ * controllerchange on a first visit too. Without this, every new visitor would
+ * be told a new version is ready before they ever had an old one.
+ */
+const hadControllerAtLoad =
+  typeof navigator !== "undefined" && !!navigator.serviceWorker?.controller;
+
+function announce() {
+  if (updateReady) return;
+  updateReady = true;
+  subscribers.forEach((notify) => notify());
+}
+
 function ensureRegistered() {
   if (started) return;
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+  // No worker is generated in dev, so registering would just 404.
+  if (!import.meta.env.PROD) return;
   started = true;
-  registerSW({
-    onNeedRefresh: () => {
-      updateReady = true;
-      subscribers.forEach((notify) => notify());
-    },
-    onRegisteredSW: (_url, reg) => { registration = reg ?? null; },
+
+  // The worker calls skipWaiting, so this is the normal path: a new one has
+  // taken over and the page is now running code older than its own cache.
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (hadControllerAtLoad) announce();
   });
+
+  void navigator.serviceWorker.register(SW_URL, { scope: "/" })
+    .then((reg) => {
+      registration = reg;
+      // Covers a worker that installed but hasn't taken over yet.
+      if (reg.waiting && navigator.serviceWorker.controller) announce();
+      reg.addEventListener("updatefound", () => {
+        const incoming = reg.installing;
+        if (!incoming) return;
+        incoming.addEventListener("statechange", () => {
+          // "installed" with a controller present means an update, not a
+          // first install.
+          if (incoming.state === "installed" && navigator.serviceWorker.controller) announce();
+        });
+      });
+    })
+    .catch(() => { /* No worker means no offline cache — the app still works. */ });
 }
 
 /** Never blocks rendering: a failed check just means no prompt this time. */
@@ -37,7 +75,7 @@ function checkForUpdate() {
 }
 
 /**
- * Reports when a newer build is cached and waiting.
+ * Reports when a newer build has been fetched and is ready to be used.
  *
  * Greenline is a PWA, so the service worker serves the app from cache. The
  * browser only looks for a new one on navigation — which means a tab left open
@@ -69,17 +107,11 @@ export function useAppUpdate() {
   }, []);
 
   /**
-   * Activates the waiting worker, then reloads once it has taken control.
-   *
-   * We message the worker directly rather than using the updateSW() helper
-   * registerSW returns: that helper resolves the waiting worker from state
-   * internal to the library, and the double registration left it looking at
-   * the wrong one — it armed the reload but never sent the message, so the
-   * button did nothing.
+   * Loads the new build. Usually the worker is already in charge and this is
+   * just a reload; if one is still waiting, we activate it first.
    */
   const reload = useCallback(() => {
     const waiting = registration?.waiting;
-    // Nothing staged (or no worker at all) — a plain reload is still correct.
     if (!waiting) { window.location.reload(); return; }
 
     let done = false;
