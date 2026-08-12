@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3, Check, ChevronLeft, ChevronRight, CircleDollarSign, DatabaseBackup, Landmark,
   Briefcase, Car, FileText, LayoutDashboard, LogOut, Moon, PiggyBank, Plus, Receipt, Search, Settings as SettingsIcon,
-  Share2, ShieldCheck, Sun, Umbrella, Undo2, Wallet, X,
+  RefreshCw, Share2, ShieldCheck, Sun, Umbrella, Undo2, Wallet, X,
 } from "lucide-react";
 import { patchSettings } from "./db/repo";
 import type { Bill, Category, Debt, Expense, Goal, IncomeSource, Mileage, MonthModel, SinkingFund } from "./types";
@@ -13,6 +13,7 @@ import { money } from "./lib/money";
 import { useNow } from "./hooks/useNow";
 import { useToast } from "./hooks/useToasts";
 import { useAppData } from "./hooks/useAppData";
+import { useAppUpdate } from "./pwa/useAppUpdate";
 import { useShares } from "./hooks/useShares";
 import { useAuth } from "./auth/AuthProvider";
 import { AdminPanel } from "./features/admin/AdminPanel";
@@ -64,7 +65,28 @@ export default function App() {
   const toast = useToast();
   const now = useNow();
   const { profile, session, signOut } = useAuth();
-  const { data, loading } = useAppData();
+  const { data, loading, reload: reloadData } = useAppData();
+  const { checkNow } = useAppUpdate();
+  const [refreshing, setRefreshing] = useState(false);
+
+  /**
+   * Pull fresh data now, and ask whether a newer build exists while we're at it.
+   *
+   * The spinner tracks the refetch only — a new version, if there is one,
+   * announces itself through the update banner rather than reloading here.
+   */
+  const refresh = async () => {
+    setRefreshing(true);
+    checkNow();
+    try {
+      await reloadData();
+      toast("Refreshed");
+    } catch {
+      toast("Couldn't refresh — check your connection", "clay");
+    } finally {
+      setRefreshing(false);
+    }
+  };
   const { shares } = useShares();
   const myId = session?.user.id;
   // Calendars other people have shared with me, and which of those I may edit.
@@ -157,6 +179,10 @@ export default function App() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <LiveClock now={now} clock24={settings.clock24} onToggle={() => patchSettings({ clock24: !settings.clock24 })} />
+          <button className="gl-icon-btn" aria-label="Refresh" title="Refresh — refetch your data and check for a new version"
+            disabled={refreshing} onClick={refresh}>
+            <RefreshCw size={15} className={refreshing ? "gl-spin" : undefined} />
+          </button>
           <button className="gl-icon-btn" aria-label="Toggle theme"
             onClick={() => patchSettings({ theme: settings.theme === "dark" ? "light" : "dark" })}>
             {settings.theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}

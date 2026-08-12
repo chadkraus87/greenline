@@ -5,7 +5,7 @@ import { onDataChange } from "../data/sync";
 
 /** Loads the signed-in user's full dataset and refetches whenever a mutation
  *  emits a change. Small per-user data → a full refetch is simplest and fast. */
-export function useAppData(): { data: AppData | null; loading: boolean; reload: () => void } {
+export function useAppData(): { data: AppData | null; loading: boolean; reload: () => Promise<void> } {
   const [data, setData] = useState<AppData | null>(null);
   const [loading, setLoading] = useState(true);
 

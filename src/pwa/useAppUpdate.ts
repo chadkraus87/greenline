@@ -122,5 +122,8 @@ export function useAppUpdate() {
     waiting.postMessage({ type: "SKIP_WAITING" });
   }, []);
 
-  return { needRefresh, reload };
+  /** Ask right now whether a new build exists, instead of waiting for the timer. */
+  const checkNow = useCallback(() => { checkForUpdate(); }, []);
+
+  return { needRefresh, reload, checkNow };
 }
