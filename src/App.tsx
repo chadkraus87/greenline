@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3, Check, ChevronLeft, ChevronRight, CircleDollarSign, DatabaseBackup, Landmark,
   Briefcase, Car, FileText, LayoutDashboard, LogOut, Moon, PiggyBank, Plus, Receipt, Search, Settings as SettingsIcon,
-  RefreshCw, Share2, ShieldCheck, Sun, Umbrella, Undo2, Wallet, X,
+  RefreshCw, Share2, ShieldCheck, Sun, Umbrella, Undo2, Wallet, X, CircleUser,
 } from "lucide-react";
 import { patchSettings } from "./db/repo";
 import type { Bill, Category, Debt, Expense, Goal, IncomeSource, Mileage, MonthModel, SinkingFund } from "./types";
@@ -23,6 +23,7 @@ import { useAuth } from "./auth/AuthProvider";
 import { AdminPanel } from "./features/admin/AdminPanel";
 import { SharingModal } from "./features/sharing/SharingModal";
 import { LiveClock, Stat, ViewHeader, Empty } from "./components/ui";
+import { Menu, MenuItem } from "./components/Menu";
 import { Runway } from "./components/Runway";
 import { Calendar, DayDetail, EventForm } from "./features/calendar/CalendarFeature";
 import { BillForm, BillsView } from "./features/bills/BillsFeature";
@@ -239,41 +240,54 @@ export default function App() {
           <h1 className="gl-display" style={{ fontSize: 24, color: "var(--fern)", margin: 0 }}>Greenline</h1>
           <div style={{ fontSize: 11.5, color: "var(--dim)" }}>Private monthly budget · secured to your account</div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <LiveClock now={now} clock24={settings.clock24} onToggle={() => patchSettings({ clock24: !settings.clock24 })} />
+
+          {/* Everyday controls stay visible and labelled; the rest live in the menu. */}
           <button className="gl-icon-btn" aria-label="Refresh" title="Refresh — refetch your data and check for a new version"
             disabled={refreshing} onClick={refresh}>
             <RefreshCw size={15} className={refreshing ? "gl-spin" : undefined} />
           </button>
-          <button className="gl-icon-btn" aria-label="Toggle theme"
+          <button className="gl-icon-btn" aria-label={settings.theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+            title="Theme"
             onClick={() => patchSettings({ theme: settings.theme === "dark" ? "light" : "dark" })}>
             {settings.theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
           </button>
-          <button className="gl-icon-btn" style={{ position: "relative" }}
-            aria-label={pendingInvites > 0 ? `Calendar sharing, ${pendingInvites} pending invitation(s)` : "Calendar sharing"}
-            title="Calendar sharing" onClick={() => setModal({ type: "sharing" })}>
-            <Share2 size={15} />
-            {pendingInvites > 0 && (
-              <span style={{ position: "absolute", top: -3, right: -3, minWidth: 15, height: 15, borderRadius: 99,
-                background: "var(--brass)", color: "#fff", fontSize: 9.5, fontWeight: 700,
-                display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>{pendingInvites}</span>
-            )}
-          </button>
-          {/* Labelled, not a bare gear: this is where self-employment mode lives,
-              and an unlabelled icon made it effectively unfindable. */}
           <button className="gl-btn" style={{ fontSize: 12.5, padding: "5px 10px" }}
-            aria-label="Settings" title="Settings" onClick={() => setModal({ type: "settings" })}>
+            title="Settings — self-employment, reminders, receipt storage"
+            onClick={() => setModal({ type: "settings" })}>
             <SettingsIcon size={14} /> Settings
           </button>
-          <button className="gl-icon-btn" aria-label="Backups" title="Backups" onClick={() => setModal({ type: "backup" })}><DatabaseBackup size={15} /></button>
-          {profile?.role === "admin" && (
-            <button className="gl-icon-btn" aria-label="Admin — manage users" title="Admin — manage users" onClick={() => setModal({ type: "admin" })}><ShieldCheck size={15} /></button>
-          )}
-          <button className="gl-icon-btn" aria-label="Sign out" title={`Sign out (${profile?.email ?? ""})`} onClick={signOut}><LogOut size={15} /></button>
+
+          <Menu label="Account" icon={<CircleUser size={14} />} badge={pendingInvites}>
+            {(close) => (
+              <>
+                <MenuItem icon={<Share2 size={14} />} badge={pendingInvites}
+                  onClick={() => { close(); setModal({ type: "sharing" }); }}>
+                  Calendar sharing
+                </MenuItem>
+                <MenuItem icon={<DatabaseBackup size={14} />}
+                  onClick={() => { close(); setModal({ type: "backup" }); }}>
+                  Backups
+                </MenuItem>
+                {profile?.role === "admin" && (
+                  <MenuItem icon={<ShieldCheck size={14} />}
+                    onClick={() => { close(); setModal({ type: "admin" }); }}>
+                    Manage users
+                  </MenuItem>
+                )}
+                <div className="gl-menu-sep" />
+                <div className="gl-menu-note">Signed in as {profile?.email ?? ""}</div>
+                <MenuItem icon={<LogOut size={14} />} onClick={() => { close(); signOut(); }}>
+                  Sign out
+                </MenuItem>
+              </>
+            )}
+          </Menu>
         </div>
       </header>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+      <div className="gl-toolbar">
         <button className="gl-icon-btn" onClick={() => nav(-1)} aria-label="Previous month"><ChevronLeft size={15} /></button>
         <span className="gl-display" style={{ fontSize: 18, minWidth: 148, textAlign: "center" }}>{MONTHS[view.m]} {view.y}</span>
         <button className="gl-icon-btn" onClick={() => nav(1)} aria-label="Next month"><ChevronRight size={15} /></button>
@@ -341,7 +355,7 @@ export default function App() {
       )}
 
       <nav role="tablist" aria-label={activeSection === "business" ? "Business views" : "Budget views"}
-        style={{ display: "flex", gap: 4, marginBottom: 14, overflowX: "auto" }}>
+        className="gl-tabs">
         {visibleTabs.map(([id, label, Icon]) => (
           <button key={id} className="gl-tab" role="tab" aria-selected={activeTab === id} onClick={() => setTab(id)}>
             <Icon size={14} /> {label}
