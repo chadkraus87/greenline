@@ -1,7 +1,9 @@
 -- Per-year mileage rates and filed-year locks.
 --
 -- Both are additive and safe to re-run. Until this is applied the app keeps
--- working: settings_to_row only sends these keys once they hold a value.
+-- working: patchSettings detects the missing columns and retries without them,
+-- so every other setting still saves and only per-year rates and filed-year
+-- locks are unavailable.
 
 -- The IRS standard mileage rate changes every year, so one scalar silently
 -- revalues prior years the moment it's updated. Keyed by year: {"2026": 0.70}.
