@@ -78,7 +78,13 @@ export function SettingsModal({ settings, expenses = [], mileage = [], onClose }
       <div className="gl-label" style={{ marginTop: 16 }}>Self-employment</div>
       <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", padding: "8px 0" }}>
         <input type="checkbox" checked={settings.businessMode} style={{ marginTop: 3 }}
-          onChange={(e) => patchSettings({ businessMode: e.target.checked })} />
+          onChange={(e) => {
+            const on = e.target.checked;
+            save({ businessMode: on });
+            // Say where the new section went — it appears behind a switch above
+            // the tabs, which is not obvious from a checkbox in a modal.
+            if (on) toast("Business section added — use the Personal / Business switch above the tabs");
+          }} />
         <span>
           <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 500 }}>
             <Briefcase size={14} /> I have self-employment income

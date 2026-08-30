@@ -259,7 +259,12 @@ export default function App() {
                 display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>{pendingInvites}</span>
             )}
           </button>
-          <button className="gl-icon-btn" aria-label="Settings" title="Settings" onClick={() => setModal({ type: "settings" })}><SettingsIcon size={15} /></button>
+          {/* Labelled, not a bare gear: this is where self-employment mode lives,
+              and an unlabelled icon made it effectively unfindable. */}
+          <button className="gl-btn" style={{ fontSize: 12.5, padding: "5px 10px" }}
+            aria-label="Settings" title="Settings" onClick={() => setModal({ type: "settings" })}>
+            <SettingsIcon size={14} /> Settings
+          </button>
           <button className="gl-icon-btn" aria-label="Backups" title="Backups" onClick={() => setModal({ type: "backup" })}><DatabaseBackup size={15} /></button>
           {profile?.role === "admin" && (
             <button className="gl-icon-btn" aria-label="Admin — manage users" title="Admin — manage users" onClick={() => setModal({ type: "admin" })}><ShieldCheck size={15} /></button>
