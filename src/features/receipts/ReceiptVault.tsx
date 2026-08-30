@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Search, FileText, ExternalLink, Briefcase, X, FilePlus2, Trash2 } from "lucide-react";
+import { Search, FileText, ExternalLink, Briefcase, X, FilePlus2, Trash2, Link2 } from "lucide-react";
 import type { Category, Expense } from "../../types";
 import { ViewHeader, Empty } from "../../components/ui";
 import { money } from "../../lib/money";
@@ -12,11 +12,17 @@ import { useToast } from "../../hooks/useToasts";
  * later" half of receipt scanning. Images stay private; each view mints a
  * short-lived signed URL rather than exposing a public link.
  */
-export function ReceiptVault({ expenses, categories, businessMode, onEdit, onFile, onUnfiledCount }:
-  { expenses: Expense[]; categories: Category[]; businessMode: boolean;
-    onEdit: (e: Expense) => void; onFile: (path: string) => void; onUnfiledCount?: (n: number) => void }) {
+export function ReceiptVault({ expenses, categories, businessMode, search = "", duplicateCount = 0,
+  onEdit, onFile, onUnfiledCount, onReviewDuplicates }:
+  { expenses: Expense[]; categories: Category[]; businessMode: boolean; search?: string;
+    duplicateCount?: number;
+    onEdit: (e: Expense) => void; onFile: (path: string) => void;
+    onUnfiledCount?: (n: number) => void; onReviewDuplicates?: () => void }) {
   const toast = useToast();
-  const [q, setQ] = useState("");
+  const [ownQ, setOwnQ] = useState("");
+  // The header search wins while it has text, so one search box covers receipts
+  // too — it's what people reach for when hunting a specific receipt.
+  const q = search.trim() ? search : ownQ;
   const [year, setYear] = useState("all");
   const [scope, setScope] = useState<"all" | "business" | "personal">("all");
   const [viewing, setViewing] = useState<{ expense: Expense; url: string } | null>(null);
@@ -81,6 +87,21 @@ export function ReceiptVault({ expenses, categories, businessMode, onEdit, onFil
       <ViewHeader title="Receipts"
         sub={`${withReceipts.length} scanned receipt${withReceipts.length === 1 ? "" : "s"} on file`} />
 
+      {duplicateCount > 0 && onReviewDuplicates && (
+        <div style={{ margin: "0 14px 12px", padding: "10px 12px", borderRadius: 9, background: "var(--brass-soft)",
+          display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <Link2 size={14} color="var(--brass)" style={{ flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 200, fontSize: 12.5 }}>
+            {duplicateCount} receipt{duplicateCount === 1 ? "" : "s"} look{duplicateCount === 1 ? "s" : ""} like the same
+            purchase as an imported card charge
+            <div style={{ fontSize: 11.5, color: "var(--dim)" }}>
+              Counted twice until they're merged, so your totals read high.
+            </div>
+          </div>
+          <button className="gl-btn" style={{ fontSize: 12 }} onClick={onReviewDuplicates}>Review</button>
+        </div>
+      )}
+
       {unfiled.length > 0 && (
         <div style={{ margin: "0 14px 12px", padding: "10px 12px", borderRadius: 9, background: "var(--brass-soft)" }}>
           <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
@@ -109,7 +130,7 @@ export function ReceiptVault({ expenses, categories, businessMode, onEdit, onFil
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "0 14px 12px", alignItems: "center" }}>
         <div style={{ position: "relative", flex: "1 1 200px" }}>
           <Search size={13} style={{ position: "absolute", left: 9, top: 10, color: "var(--dim)" }} />
-          <input className="gl-input" value={q} onChange={(e) => setQ(e.target.value)}
+          <input className="gl-input" value={q} onChange={(e) => setOwnQ(e.target.value)}
             placeholder="Search merchant, amount, notes…" aria-label="Search receipts"
             style={{ paddingLeft: 28, fontSize: 13 }} />
         </div>

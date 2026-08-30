@@ -8,12 +8,16 @@ import { patchSettings } from "./db/repo";
 import type { Bill, Category, Debt, Expense, Goal, IncomeSource, Mileage, MonthModel, SinkingFund } from "./types";
 import { computeMonth } from "./lib/forecast";
 import { categoryRollover } from "./lib/insights";
-import { MONTHS } from "./lib/dates";
+import { MONTHS, ymd } from "./lib/dates";
+import { quarterlyDueDates } from "./lib/tax";
 import { money } from "./lib/money";
 import { useNow } from "./hooks/useNow";
 import { useToast } from "./hooks/useToasts";
 import { useAppData } from "./hooks/useAppData";
 import { useAppUpdate } from "./pwa/useAppUpdate";
+import { notifyOnce } from "./pwa/notifications";
+import { flushQueue, queuedCount } from "./pwa/offlineQueue";
+import { uploadReceipt } from "./db/actions";
 import { useShares } from "./hooks/useShares";
 import { useAuth } from "./auth/AuthProvider";
 import { AdminPanel } from "./features/admin/AdminPanel";
@@ -27,6 +31,8 @@ import { ExpenseForm, ExpensesView } from "./features/expenses/ExpensesFeature";
 import { ReceiptScanner, type ReceiptPrefill } from "./features/expenses/ReceiptScanner";
 import { ImportModal } from "./features/expenses/ImportModal";
 import { BulkCategorizeModal, countCategorizable } from "./features/expenses/BulkCategorizeModal";
+import { ReceiptMatchModal } from "./features/expenses/ReceiptMatchModal";
+import { findReceiptMatches } from "./lib/receiptMatch";
 import { BudgetsView, CategoryForm } from "./features/budgets/BudgetsView";
 import { GoalForm, GoalsView } from "./features/goals/GoalsFeature";
 import { DebtForm, DebtsView } from "./features/debts/DebtsFeature";
@@ -46,20 +52,29 @@ type ModalState =
   | { type: "debt"; data?: Debt } | { type: "sinking"; data?: SinkingFund }
   | { type: "category"; data?: Category }
   | { type: "backup" } | { type: "admin" } | { type: "sharing" } | { type: "import" }
-  | { type: "settings" } | { type: "mileage"; data?: Mileage } | { type: "bulkcat" } | null;
+  | { type: "settings" } | { type: "mileage"; data?: Mileage } | { type: "bulkcat" }
+  | { type: "receiptmatch" } | null;
 
-const BASE_TABS = [
+const PERSONAL_TABS = [
   ["overview", "Overview", LayoutDashboard], ["bills", "Bills", Receipt],
   ["income", "Income", CircleDollarSign], ["expenses", "Expenses", Wallet],
   ["receipts", "Receipts", FileText],
   ["budgets", "Budgets", BarChart3], ["goals", "Goals", PiggyBank],
   ["reserves", "Reserves", Umbrella], ["debt", "Debt", Landmark], ["reports", "Reports", BarChart3],
 ] as const;
-// Only shown when self-employment mode is on, so W-2 users never see them.
+/**
+ * Its own section, not extra tabs on the end of the personal ones.
+ *
+ * Household budgeting and running a business are two different jobs, and
+ * mixing them into one strip of eleven tabs makes both harder to navigate.
+ * Hidden entirely unless self-employment mode is on, so a W-2 user never sees
+ * a section that has nothing to do with them.
+ */
 const BUSINESS_TABS = [
-  ["mileage", "Mileage", Car], ["tax", "Tax", Briefcase],
+  ["tax", "Tax", Briefcase], ["mileage", "Mileage", Car],
 ] as const;
-type Tab = (typeof BASE_TABS)[number][0] | (typeof BUSINESS_TABS)[number][0];
+type Tab = (typeof PERSONAL_TABS)[number][0] | (typeof BUSINESS_TABS)[number][0];
+type Section = "personal" | "business";
 
 export default function App() {
   const toast = useToast();
@@ -96,6 +111,7 @@ export default function App() {
   const pendingInvites = shares.filter((s) => s.direction === "incoming" && s.status === "pending").length;
   const [view, setView] = useState(() => ({ y: new Date().getFullYear(), m: new Date().getMonth() }));
   const [tab, setTab] = useState<Tab>("overview");
+  const [section, setSection] = useState<Section>("personal");
   const [modal, setModal] = useState<ModalState>(null);
   const [search, setSearch] = useState("");
   const [undo, setUndo] = useState<{ label: string; fn: UndoFn } | null>(null);
@@ -120,8 +136,20 @@ export default function App() {
     [expenses, categories, settings.businessMode]
   );
   const [unfiledCount, setUnfiledCount] = useState(0);
+  // Receipts that look like the same purchase as an imported charge.
+  const duplicateReceipts = useMemo(() => findReceiptMatches(expenses).length, [expenses]);
 
-  const visibleTabs = settings.businessMode ? [...BASE_TABS, ...BUSINESS_TABS] : BASE_TABS;
+  // Turning self-employment off while inside the business section would leave
+  // the user on a tab that no longer exists.
+  const activeSection: Section = settings.businessMode ? section : "personal";
+  const visibleTabs = activeSection === "business" ? BUSINESS_TABS : PERSONAL_TABS;
+  const activeTab: Tab = visibleTabs.some(([id]) => id === tab) ? tab : visibleTabs[0][0];
+
+  const goToSection = (next: Section) => {
+    setSection(next);
+    // Land on the section's first tab rather than a blank panel.
+    setTab(next === "business" ? BUSINESS_TABS[0][0] : PERSONAL_TABS[0][0]);
+  };
 
   const dayStamp = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours()}`;
   const month: MonthModel = useMemo(
@@ -148,13 +176,47 @@ export default function App() {
       if (b.date === month.todayYmd && !notified.current.has(`due${key}`)) {
         notified.current.add(`due${key}`);
         toast(`${b.name} (${money(b.amount)}) is due today`, "brass");
+        // A toast only reaches someone already looking at the app, which is not
+        // where a bill gets forgotten. Silently no-ops without permission.
+        notifyOnce(`due-${b.id}-${b.date}`, "Bill due today", `${b.name} — ${money(b.amount)}`);
       }
       if (b.overdue && !notified.current.has(`od${key}`)) {
         notified.current.add(`od${key}`);
         toast(`${b.name} is overdue`, "clay");
+        notifyOnce(`od-${b.id}-${month.ym}`, "Bill overdue", `${b.name} — ${money(b.amount)}`);
       }
     }
   }, [month, toast]);
+
+  // Estimated-tax reminder. The Tax tab already shows a countdown, but only to
+  // someone who opens it — and a missed quarterly payment accrues a penalty.
+  useEffect(() => {
+    if (!settings.businessMode) return;
+    const today = ymd(now);
+    for (const q of quarterlyDueDates(now.getFullYear())) {
+      if (q.due < today) continue;
+      const days = Math.round((Date.parse(`${q.due}T00:00:00`) - Date.parse(`${today}T00:00:00`)) / 86400000);
+      if (days > 14) break;
+      notifyOnce(`estq-${q.due}`, `${q.label} estimated tax due ${q.due}`,
+        days === 0 ? "Due today." : `Due in ${days} day${days === 1 ? "" : "s"}.`);
+      break;
+    }
+  }, [settings.businessMode, now]);
+
+  // Receipts photographed with no signal upload themselves once it's back.
+  useEffect(() => {
+    let cancelled = false;
+    const flush = async () => {
+      if (!myId || !navigator.onLine || (await queuedCount(myId)) === 0) return;
+      const { uploaded } = await flushQueue(uploadReceipt, myId);
+      if (uploaded > 0 && !cancelled) {
+        toast(`Uploaded ${uploaded} saved receipt${uploaded === 1 ? "" : "s"} — see Receipts`);
+      }
+    };
+    void flush();
+    window.addEventListener("online", flush);
+    return () => { cancelled = true; window.removeEventListener("online", flush); };
+  }, [toast, myId]);
 
   if (loading && !data) {
     return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", color: "var(--dim)" }}>Loading your ledger…</div>;
@@ -228,7 +290,7 @@ export default function App() {
         <div style={{ position: "relative" }}>
           <Search size={13} style={{ position: "absolute", left: 9, top: 9, color: "var(--dim)" }} />
           <input className="gl-input" placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)}
-            style={{ width: 150, padding: "6px 8px 6px 28px", fontSize: 13 }} aria-label="Search bills, income, and expenses" />
+            style={{ width: 150, padding: "6px 8px 6px 28px", fontSize: 13 }} aria-label="Search bills, income, expenses, receipts, and mileage" />
         </div>
       </div>
 
@@ -253,15 +315,36 @@ export default function App() {
         </div>
       )}
 
-      <nav role="tablist" style={{ display: "flex", gap: 4, marginBottom: 14, overflowX: "auto" }}>
+      {settings.businessMode && (
+        <div className="gl-sections" role="tablist" aria-label="Section">
+          <button className="gl-section" role="tab" aria-selected={activeSection === "personal"}
+            onClick={() => goToSection("personal")}>
+            <Wallet size={14} /> Personal
+          </button>
+          <button className="gl-section" role="tab" aria-selected={activeSection === "business"}
+            onClick={() => goToSection("business")}>
+            <Briefcase size={14} /> Business
+          </button>
+        </div>
+      )}
+
+      {activeSection === "business" && (
+        <p className="gl-section-note">
+          Self-employment only — Schedule C categories, mileage, and the export for your
+          preparer. Your household budget is under <strong>Personal</strong>.
+        </p>
+      )}
+
+      <nav role="tablist" aria-label={activeSection === "business" ? "Business views" : "Budget views"}
+        style={{ display: "flex", gap: 4, marginBottom: 14, overflowX: "auto" }}>
         {visibleTabs.map(([id, label, Icon]) => (
-          <button key={id} className="gl-tab" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
+          <button key={id} className="gl-tab" role="tab" aria-selected={activeTab === id} onClick={() => setTab(id)}>
             <Icon size={14} /> {label}
           </button>
         ))}
       </nav>
 
-      {tab === "overview" && (
+      {activeTab === "overview" && (
         <div className="gl-grid-main">
           <Calendar y={view.y} m={view.m} month={month} myId={myId} onDayClick={(ds) => setModal({ type: "day", date: ds })} />
           <div style={{ display: "grid", gap: 14 }}>
@@ -304,7 +387,7 @@ export default function App() {
           </div>
         </div>
       )}
-      {tab === "bills" && (
+      {activeTab === "bills" && (
         <>
           <div style={{ marginBottom: 10, textAlign: "right" }}>
             <button className="gl-btn primary" onClick={() => setModal({ type: "bill" })}><Plus size={14} /> Add bill</button>
@@ -313,7 +396,7 @@ export default function App() {
             onEdit={(b) => setModal({ type: "bill", data: bills.find((x) => x.id === b.id) })} onUndoable={onUndoable} />
         </>
       )}
-      {tab === "income" && (
+      {activeTab === "income" && (
         <>
           <div style={{ marginBottom: 10, textAlign: "right" }}>
             <button className="gl-btn primary" onClick={() => setModal({ type: "income" })}><Plus size={14} /> Add source</button>
@@ -322,7 +405,7 @@ export default function App() {
             onEdit={(i) => setModal({ type: "income", data: i })} onUndoable={onUndoable} />
         </>
       )}
-      {tab === "expenses" && (
+      {activeTab === "expenses" && (
         <ExpensesView month={month} categories={categories} allExpenses={expenses} search={q}
           categorizable={categorizable} onBulkCategorize={() => setModal({ type: "bulkcat" })}
           onAdd={() => setModal({ type: "expense", date: defaultExpenseDate })}
@@ -331,8 +414,9 @@ export default function App() {
           onImport={() => setModal({ type: "import" })}
           onUndoable={onUndoable} />
       )}
-      {tab === "receipts" && (
-        <ReceiptVault expenses={expenses} categories={categories} businessMode={settings.businessMode}
+      {activeTab === "receipts" && (
+        <ReceiptVault expenses={expenses} categories={categories} businessMode={settings.businessMode} search={q}
+          duplicateCount={duplicateReceipts} onReviewDuplicates={() => setModal({ type: "receiptmatch" })}
           onEdit={(e) => setModal({ type: "expense", data: e })}
           onUnfiledCount={setUnfiledCount}
           onFile={(path) => setModal({ type: "expense", date: defaultExpenseDate, prefill: {
@@ -340,23 +424,23 @@ export default function App() {
             receiptPath: path, confidence: "low",
           } })} />
       )}
-      {tab === "mileage" && settings.businessMode && (
-        <MileageView entries={mileage} settings={settings} year={view.y}
+      {activeTab === "mileage" && settings.businessMode && (
+        <MileageView entries={mileage} settings={settings} year={view.y} search={q}
           onAdd={() => setModal({ type: "mileage" })}
           onEdit={(m) => setModal({ type: "mileage", data: m })} onUndoable={onUndoable} />
       )}
-      {tab === "tax" && settings.businessMode && (
+      {activeTab === "tax" && settings.businessMode && (
         <Suspense fallback={<div style={{ color: "var(--dim)", padding: 20 }}>Loading…</div>}>
           <TaxView data={{ settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts, mileage }} year={view.y} unfiledReceipts={unfiledCount} />
         </Suspense>
       )}
-      {tab === "budgets" && (
+      {activeTab === "budgets" && (
         <BudgetsView month={month} categories={categories} elapsedPct={dayProgress}
           rollover={rollover} rolloverOn={settings.rolloverBudgets}
           onAddCategory={() => setModal({ type: "category" })}
           onEditCategory={(c) => setModal({ type: "category", data: c })} />
       )}
-      {tab === "goals" && (
+      {activeTab === "goals" && (
         <>
           <div style={{ marginBottom: 10, textAlign: "right" }}>
             <button className="gl-btn primary" onClick={() => setModal({ type: "goal" })}><Plus size={14} /> Add goal</button>
@@ -364,11 +448,11 @@ export default function App() {
           <GoalsView goals={goals} onEdit={(g) => setModal({ type: "goal", data: g })} onUndoable={onUndoable} />
         </>
       )}
-      {tab === "reserves" && (
+      {activeTab === "reserves" && (
         <ReservesView funds={sinkingFunds} onAdd={() => setModal({ type: "sinking" })}
           onEdit={(f) => setModal({ type: "sinking", data: f })} onUndoable={onUndoable} />
       )}
-      {tab === "debt" && (
+      {activeTab === "debt" && (
         <>
           <div style={{ marginBottom: 10, textAlign: "right" }}>
             <button className="gl-btn primary" onClick={() => setModal({ type: "debt" })}><Plus size={14} /> Add debt</button>
@@ -376,7 +460,7 @@ export default function App() {
           <DebtsView debts={debts} settings={settings} onEdit={(d) => setModal({ type: "debt", data: d })} onUndoable={onUndoable} />
         </>
       )}
-      {tab === "reports" && (
+      {activeTab === "reports" && (
         <Suspense fallback={<div style={{ color: "var(--dim)", padding: 20 }}>Loading charts…</div>}>
           <ReportsView month={month} categories={categories} data={{ settings, categories, incomes, bills, expenses, goals, events, sinkingFunds, debts, mileage }} y={view.y} m={view.m} now={now} />
         </Suspense>
@@ -399,7 +483,8 @@ export default function App() {
       {modal?.type === "backup" && <BackupModal onClose={() => setModal(null)} />}
       {modal?.type === "admin" && <AdminPanel onClose={() => setModal(null)} />}
       {modal?.type === "sharing" && <SharingModal onClose={() => setModal(null)} />}
-      {modal?.type === "settings" && <SettingsModal settings={settings} expenses={expenses} onClose={() => setModal(null)} />}
+      {modal?.type === "settings" && <SettingsModal settings={settings} expenses={expenses} mileage={mileage} onClose={() => setModal(null)} />}
+      {modal?.type === "receiptmatch" && <ReceiptMatchModal expenses={expenses} onClose={() => setModal(null)} />}
       {modal?.type === "bulkcat" && <BulkCategorizeModal expenses={expenses} categories={categories} businessMode={settings.businessMode} onClose={() => setModal(null)} />}
       {modal?.type === "mileage" && <MileageForm initial={modal.data} defaultDate={defaultExpenseDate} onClose={() => setModal(null)} />}
       {modal?.type === "import" && <ImportModal categories={categories} existing={expenses} businessMode={settings.businessMode} onClose={() => setModal(null)} />}

@@ -51,6 +51,7 @@ export function IncomeForm({ initial, defaultDate, onClose }: { initial?: Income
 
 export function IncomeView({ month, incomes, search, onEdit, onUndoable }:
   { month: MonthModel; incomes: IncomeSource[]; search: string; onEdit: (i: IncomeSource) => void; onUndoable: (label: string, undo: act.UndoFn | null) => void }) {
+  const toast = useToast();
   const list = incomes.filter((i) => i.name.toLowerCase().includes(search));
   return (
     <div className="gl-card">
@@ -69,7 +70,7 @@ export function IncomeView({ month, incomes, search, onEdit, onUndoable }:
                 {occs.map((o) => (
                   <button key={o.key} className="gl-btn"
                     style={{ padding: "3px 8px", fontSize: 11.5, ...(o.received ? { background: "var(--fern-soft)", color: "var(--fern)" } : {}) }}
-                    onClick={() => act.toggleIncomeReceived(inc.id, o.date)}>
+                    onClick={() => { act.toggleIncomeReceived(inc.id, o.date).catch((e: Error) => toast(e.message, "clay")); }}>
                     Day {o.day} {o.received ? "✓" : ""}
                   </button>
                 ))}

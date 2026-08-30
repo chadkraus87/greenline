@@ -148,12 +148,23 @@ Whatever the source:
 
 ## Self-employment (optional)
 
-Off by default. Turn on **Settings → I have self-employment income** and the app adds:
+Off by default. Turn on **Settings → I have self-employment income** and the business
+features appear as **their own section** — a Personal/Business switch above the tabs,
+not extra tabs bolted onto the household budget. A W-2 user never sees it.
+
+The section adds:
 
 - **Business tagging** on expenses, with a **business-use %** for mixed costs and a
   **Schedule C category** per expense. Meals are correctly treated as 50% deductible.
 - **Mileage log** — date, miles, and business purpose per trip (what the IRS actually
-  asks for), valued at a user-editable standard rate, exportable as CSV.
+  asks for), exportable as CSV. **The rate is stored per year**: the IRS changes it
+  annually, and one shared value silently revalues prior years the moment it's updated,
+  changing numbers on a package already sent to a preparer. A year with no rate of its
+  own inherits the most recent earlier one.
+- **Filed-year locks** — mark a year filed and edits to expenses, mileage, and income
+  dated in it are refused, including moving a record *out* of that year. A guardrail
+  against changing an already-filed return, not a permission boundary: any year can be
+  unlocked in Settings.
 - **Tax tab** — income, deductions grouped by Schedule C line, net profit, an SE-tax
   set-aside estimate, and quarterly due dates. Plus a **readiness check** (uncategorized
   spend, expenses over $75 with no receipt, income never marked received), a **prior-year
@@ -169,6 +180,15 @@ Greenline is a budget tracker, **not** bookkeeping software: no client books, no
 accounts, no double entry. Tax figures are planning estimates, not advice or a filed return.
 
 ## Receipts
+
+Photographing a receipt with no signal keeps it: the photo is queued locally and
+uploaded when the connection returns, landing in the vault as unfiled. The queue is
+tagged with the user who took the photo, so a shared browser never uploads one person's
+receipt into someone else's account.
+
+Scanning a receipt *and* importing the card charge records the same purchase twice.
+Greenline spots those pairs and offers to merge them — the charge that cleared your
+account survives and gains the receipt image.
 
 Every scanned receipt is filed in a searchable **Receipts** tab — filter by year,
 business/personal, or free text (merchant, amount, notes), then view the original image.
@@ -204,6 +224,18 @@ problem instead.
 The worker is registered with plain browser APIs, not `registerSW()` from
 `virtual:pwa-register` — that helper keeps state we can't see and installs its
 own `controlling -> location.reload()` listener, which reloads the page unasked.
+
+## Reminders
+
+Bill due dates and estimated-tax deadlines can be delivered as system notifications
+(**Settings → Reminders**) — a toast only reaches someone who already has the app open,
+which is not where a bill gets forgotten.
+
+## Database migrations
+
+Migrations in `supabase/migrations/` are applied in order. **0005 must be applied** for
+per-year mileage rates and filed-year locks; until it is, those two features report that
+they need it and everything else keeps working.
 
 ## Deployment
 

@@ -83,8 +83,18 @@ export interface Settings {
   rolloverBudgets: boolean;
   /** Reveals self-employment features. Off for W-2-only users. */
   businessMode: boolean;
-  /** IRS standard mileage rate — changes annually, so it's user-editable. */
+  /**
+   * Legacy single mileage rate. Kept as the fallback for years with no entry
+   * in `mileageRates`; new writes go to that map instead.
+   */
   mileageRate: number;
+  /**
+   * IRS standard mileage rate per calendar year, e.g. `{ "2026": 0.70 }`.
+   * The rate changes annually, so one scalar silently revalues prior years.
+   */
+  mileageRates?: Record<string, number>;
+  /** Years marked as filed. Edits to dates in these years are refused. */
+  lockedYears?: number[];
   businessName?: string;
 }
 

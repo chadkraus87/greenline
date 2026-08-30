@@ -1,5 +1,6 @@
 import type { AppData, Expense, Mileage } from "../types";
 import { round2 } from "./money";
+import { rateForYear } from "./mileageRate";
 
 /**
  * Self-employment tax helpers for sole proprietors (Schedule C).
@@ -120,7 +121,8 @@ export function taxSummary(data: AppData, year: number): TaxSummary {
   }
 
   const miles = round2((data.mileage ?? []).filter((m) => inYear(m.date)).reduce((s, m) => s + m.miles, 0));
-  const mileageDeduction = round2(miles * (data.settings.mileageRate || 0));
+  // That year's rate, not today's — a filed year keeps the rate it was filed with.
+  const mileageDeduction = round2(miles * rateForYear(data.settings, year));
 
   const lines = [...totals.values()].sort((a, b) => b.deductible - a.deductible);
   const expenseDeductions = round2(lines.reduce((s, l) => s + l.deductible, 0));
@@ -146,10 +148,16 @@ export function quarterlyDueDates(year: number): { label: string; due: string; c
   ];
 }
 
-/** CSV of the mileage log — the substantiation the IRS asks for. */
-export function mileageCsvRows(entries: Mileage[], rate: number): (string | number)[][] {
+/**
+ * CSV of the mileage log — the substantiation the IRS asks for.
+ *
+ * Takes a per-trip rate rather than one number, so a log spanning a rate change
+ * values each trip at the rate for its own year.
+ */
+export function mileageCsvRows(entries: Mileage[], rateFor: (date: string) => number): (string | number)[][] {
   const rows: (string | number)[][] = [["Date", "Miles", "Purpose", "From", "To", "Rate", "Deduction"]];
   for (const m of [...entries].sort((a, b) => a.date.localeCompare(b.date))) {
+    const rate = rateFor(m.date);
     rows.push([m.date, m.miles, m.purpose, m.from ?? "", m.to ?? "", rate.toFixed(3), (m.miles * rate).toFixed(2)]);
   }
   return rows;

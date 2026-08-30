@@ -4,6 +4,7 @@ import type { Mileage, Settings } from "../../types";
 import { Modal, Field, FormActions, ViewHeader, Empty } from "../../components/ui";
 import { money, num, sanitize } from "../../lib/money";
 import { mileageCsvRows } from "../../lib/tax";
+import { rateForYear } from "../../lib/mileageRate";
 import { toCsv } from "../../lib/csv";
 import * as act from "../../db/actions";
 import { useToast } from "../../hooks/useToasts";
@@ -19,10 +20,15 @@ export function MileageForm({ initial, defaultDate, onClose }:
     to: initial?.to ?? "",
   });
   const save = async () => {
-    await act.saveMileage({
-      id: initial?.id, date: f.date, miles: num(f.miles),
-      purpose: sanitize(f.purpose), from: sanitize(f.from) || undefined, to: sanitize(f.to) || undefined,
-    });
+    try {
+      await act.saveMileage({
+        id: initial?.id, date: f.date, miles: num(f.miles),
+        purpose: sanitize(f.purpose), from: sanitize(f.from) || undefined, to: sanitize(f.to) || undefined,
+      });
+    } catch (e) {
+      // A filed-year lock lands here; the message says which year and how to lift it.
+      return toast((e as Error).message || "Couldn't save", "clay");
+    }
     toast(initial ? "Trip updated" : "Trip logged");
     onClose();
   };
@@ -49,18 +55,22 @@ export function MileageForm({ initial, defaultDate, onClose }:
   );
 }
 
-export function MileageView({ entries, settings, year, onAdd, onEdit, onUndoable }:
-  { entries: Mileage[]; settings: Settings; year: number; onAdd: () => void;
+export function MileageView({ entries, settings, year, search = "", onAdd, onEdit, onUndoable }:
+  { entries: Mileage[]; settings: Settings; year: number; search?: string; onAdd: () => void;
     onEdit: (m: Mileage) => void; onUndoable: (label: string, undo: act.UndoFn | null) => void }) {
   const toast = useToast();
-  const rate = settings.mileageRate || 0;
+  // The rate for the year being viewed, not whatever is current.
+  const rate = rateForYear(settings, year);
+  const rateFor = (date: string) => rateForYear(settings, Number(date.slice(0, 4)) || year);
+  const q = search.trim().toLowerCase();
   const thisYear = entries.filter((m) => m.date.startsWith(String(year)))
+    .filter((m) => !q || `${m.purpose} ${m.from ?? ""} ${m.to ?? ""} ${m.date}`.toLowerCase().includes(q))
     .sort((a, b) => b.date.localeCompare(a.date));
   const miles = thisYear.reduce((s, m) => s + m.miles, 0);
   const deduction = miles * rate;
 
   const exportCsv = () => {
-    const blob = new Blob([toCsv(mileageCsvRows(thisYear, rate))], { type: "text/csv" });
+    const blob = new Blob([toCsv(mileageCsvRows(thisYear, rateFor))], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `greenline-mileage-${year}.csv`;
@@ -110,7 +120,7 @@ export function MileageView({ entries, settings, year, onAdd, onEdit, onUndoable
           <span className="gl-mono" style={{ color: "var(--fern)", fontSize: 12.5 }}>{money(m.miles * rate)}</span>
           <button className="gl-icon-btn" onClick={() => onEdit(m)} aria-label="Edit trip"><Pencil size={13} /></button>
           <button className="gl-icon-btn" aria-label="Delete trip"
-            onClick={async () => onUndoable("Trip deleted", await act.deleteMileage(m.id))}><Trash2 size={13} /></button>
+            onClick={async () => { try { onUndoable("Trip deleted", await act.deleteMileage(m.id)); } catch (e) { toast((e as Error).message, "clay"); } }}><Trash2 size={13} /></button>
         </div>
       ))}
 

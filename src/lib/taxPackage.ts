@@ -1,6 +1,7 @@
 import type { AppData } from "../types";
 import { toCsv } from "./csv";
 import { taxSummary, deductibleAmount, TAX_LINE_BY_ID, quarterlyDueDates } from "./tax";
+import { rateForYear } from "./mileageRate";
 import { safeName } from "./zip";
 
 /**
@@ -49,7 +50,7 @@ export function buildTaxPackage(data: AppData, year: number): PackageFile[] {
     "  Accounting basis: CASH (income counted when received, expenses when paid).",
     "  Deductible amount = amount x business-use % x the Schedule C line's own",
     "  deductible %. Meals are treated as 50% deductible; all other lines 100%.",
-    `  Mileage uses the standard rate of $${data.settings.mileageRate.toFixed(3)}/mile,`,
+    `  Mileage uses the ${year} standard rate of $${rateForYear(data.settings, year).toFixed(3)}/mile,`,
     "  set by the taxpayer. Standard mileage and actual vehicle costs are mutually",
     "  exclusive — if mileage is claimed, vehicle operating costs should not also",
     "  be deducted on line 9.",
@@ -132,7 +133,9 @@ export function buildTaxPackage(data: AppData, year: number): PackageFile[] {
   income.push([], ["TOTAL", "", s.businessIncome.toFixed(2), ""]);
 
   // --- Mileage ------------------------------------------------------------
-  const rate = data.settings.mileageRate;
+  // The rate for the year being exported, so re-exporting a filed year after
+  // the annual rate change reproduces the same numbers.
+  const rate = rateForYear(data.settings, year);
   const mileageRows: (string | number)[][] = [["Date", "Miles", "Business purpose", "From", "To", "Rate", "Deduction"]];
   for (const m of mileage) {
     mileageRows.push([m.date, m.miles, m.purpose, m.from ?? "", m.to ?? "", rate.toFixed(3), (m.miles * rate).toFixed(2)]);

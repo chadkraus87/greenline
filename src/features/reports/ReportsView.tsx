@@ -6,6 +6,9 @@ import type { AppData, Category, MonthModel } from "../../types";
 import { Empty } from "../../components/ui";
 import { money } from "../../lib/money";
 import { monthlyHistory, emergencyFund, netWorth } from "../../lib/insights";
+import { findRecurring, recurringMonthlyTotal } from "../../lib/recurring";
+import { merchantKey } from "../../lib/autoCategorize";
+import { ymd } from "../../lib/dates";
 
 const tooltipStyle = { background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12 };
 const fmtK = (v: number) => "$" + (Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + "k" : String(v));
@@ -37,6 +40,14 @@ export function ReportsView({ month, categories, data, y, m, now }:
   const efPct = ef.target > 0 ? Math.min(100, (ef.saved / ef.target) * 100) : 0;
   const subs = [...data.bills].filter((b) => !b.paused).sort((a, b) => b.amount - a.amount);
   const annualRecurring = subs.reduce((s, b) => s + b.amount * 12, 0);
+
+  // Charges that repeat on a schedule but were never set up as a bill — the
+  // subscriptions nobody remembers signing up for. Anything already tracked as
+  // a bill is left out so the two lists don't double-count each other.
+  const declared = new Set(subs.map((b) => merchantKey(b.name)));
+  const discovered = findRecurring(data.expenses, ymd(now))
+    .filter((r) => !r.lapsed && !declared.has(r.key));
+  const discoveredMonthly = recurringMonthlyTotal(discovered);
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
@@ -133,6 +144,37 @@ export function ReportsView({ month, categories, data, y, m, now }:
             Covers <strong style={{ color: "var(--text)" }}>{ef.monthsCovered.toFixed(1)} months</strong> of your ~{money(ef.monthlyNeed)}/mo obligations.
             Target is {data.settings.emergencyMonths} months. {ef.monthsCovered >= data.settings.emergencyMonths ? "Fully funded — nicely done." : "Keep going."}
           </p>
+        </div>
+      )}
+
+      {discovered.length > 0 && (
+        <div className="gl-card" style={{ padding: 16 }}>
+          <div className="gl-display" style={{ fontSize: 15, marginBottom: 4 }}>Repeating charges we spotted</div>
+          <p style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 0, marginBottom: 10 }}>
+            Found in your spending, not set up as bills — {money(discoveredMonthly)}/month
+            ({money(discoveredMonthly * 12)}/year) in total. Add one as a bill to have it forecast.
+          </p>
+          <div style={{ overflowX: "auto" }}>
+            <table className="gl-table">
+              <thead>
+                <tr>
+                  <th>Merchant</th><th>Every</th><th style={{ textAlign: "right" }}>Typical</th>
+                  <th style={{ textAlign: "right" }}>Per month</th><th>Next expected</th>
+                </tr>
+              </thead>
+              <tbody>
+                {discovered.map((r) => (
+                  <tr key={r.key}>
+                    <td>{r.merchant}<div style={{ fontSize: 11, color: "var(--dim)" }}>{r.occurrences} charges since {r.firstDate}</div></td>
+                    <td style={{ textTransform: "capitalize" }}>{r.cadence}</td>
+                    <td className="gl-mono" style={{ textAlign: "right" }}>{money(r.typicalAmount)}</td>
+                    <td className="gl-mono" style={{ textAlign: "right", fontWeight: 600 }}>{money(r.monthlyCost)}</td>
+                    <td className="gl-mono" style={{ fontSize: 12, color: "var(--dim)" }}>{r.nextExpected}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

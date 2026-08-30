@@ -135,9 +135,21 @@ describe("mileageCsvRows", () => {
     const rows = mileageCsvRows([
       { id: "b", date: "2026-02-01", miles: 10, purpose: "Second" },
       { id: "a", date: "2026-01-01", miles: 20, purpose: "First", from: "Home", to: "Gym" },
-    ], 0.7);
+    ], () => 0.7);
     expect(rows[0][0]).toBe("Date");
     expect(rows[1]).toEqual(["2026-01-01", 20, "First", "Home", "Gym", "0.700", "14.00"]);
     expect(rows[2][6]).toBe("7.00");
+  });
+
+  it("values each trip at its own year's rate", () => {
+    // A log spanning a rate change must not price old trips at the new rate.
+    const rows = mileageCsvRows([
+      { id: "a", date: "2025-12-30", miles: 100, purpose: "Old year" },
+      { id: "b", date: "2026-01-02", miles: 100, purpose: "New year" },
+    ], (d) => (d.startsWith("2025") ? 0.67 : 0.7));
+    expect(rows[1][5]).toBe("0.670");
+    expect(rows[1][6]).toBe("67.00");
+    expect(rows[2][5]).toBe("0.700");
+    expect(rows[2][6]).toBe("70.00");
   });
 });

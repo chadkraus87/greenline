@@ -1,20 +1,47 @@
 import { useState } from "react";
-import { Briefcase, Trash2, ShieldAlert } from "lucide-react";
+import { Briefcase, Trash2, ShieldAlert, Lock, LockOpen, Bell } from "lucide-react";
 import { Modal, Field } from "../components/ui";
-import type { Expense, Settings } from "../types";
+import type { Expense, Mileage, Settings } from "../types";
 import { num } from "../lib/money";
 import { patchSettings } from "../db/repo";
 import { retentionGroups } from "../lib/taxReadiness";
 import { purgeReceipts } from "../db/actions";
+import { rateForYear, ratedYears, setRateForYear, hasOwnRate } from "../lib/mileageRate";
+import { lockedYears, toggleYearLock } from "../lib/yearLock";
+import { notificationPermission, requestNotificationPermission } from "../pwa/notifications";
 import { useToast } from "../hooks/useToasts";
 
 /** Preferences, including the self-employment switch that reveals business features. */
-export function SettingsModal({ settings, expenses = [], onClose }:
-  { settings: Settings; expenses?: Expense[]; onClose: () => void }) {
+export function SettingsModal({ settings, expenses = [], mileage = [], onClose }:
+  { settings: Settings; expenses?: Expense[]; mileage?: Mileage[]; onClose: () => void }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  const [perms, setPerms] = useState(notificationPermission());
   const groups = retentionGroups(expenses);
   const thisYear = new Date().getFullYear();
+
+  // Years worth offering a rate or a lock for: anything with activity, plus
+  // this year and last, newest first.
+  const activeYears = [...new Set([
+    thisYear, thisYear - 1,
+    ...expenses.map((e) => Number(e.date.slice(0, 4))),
+    ...mileage.map((m) => Number(m.date.slice(0, 4))),
+    ...ratedYears(settings),
+    ...lockedYears(settings),
+  ].filter((y) => Number.isInteger(y) && y > 1900))].sort((a, b) => b - a);
+
+  const locked = lockedYears(settings);
+
+  /** Surfaces the "migration 0005 not applied" case instead of failing silently. */
+  const save = (patch: Parameters<typeof patchSettings>[0]) =>
+    void patchSettings(patch).catch((e: Error) => toast(e.message, "clay"));
+
+  const askNotifications = async () => {
+    const result = await requestNotificationPermission();
+    setPerms(result);
+    if (result === "granted") toast("Reminders on — you'll get bill and estimated-tax alerts");
+    else if (result === "denied") toast("Your browser blocked reminders — enable them in site settings", "brass");
+  };
 
   // Only personal receipts can be cleared in bulk. Business receipts
   // substantiate a filed return, so they're deliberately not offered here.
@@ -75,6 +102,73 @@ export function SettingsModal({ settings, expenses = [], onClose }:
               onBlur={(e) => patchSettings({ mileageRate: Math.max(0, Math.min(10, parseFloat(e.target.value) || 0)) })} />
           </Field>
         </div>
+      )}
+
+      <div className="gl-label" style={{ marginTop: 16 }}>Reminders</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 220, fontSize: 12.5, color: "var(--dim)" }}>
+          Bill due dates and estimated-tax deadlines, as system notifications — a toast only
+          reaches you if the app is already open.
+        </div>
+        {perms === "granted" ? (
+          <span style={{ fontSize: 12, color: "var(--fern)" }}><Bell size={12} /> On</span>
+        ) : perms === "unsupported" ? (
+          <span style={{ fontSize: 12, color: "var(--dim)" }}>Not supported here</span>
+        ) : perms === "denied" ? (
+          <span style={{ fontSize: 12, color: "var(--dim)" }}>Blocked in browser settings</span>
+        ) : (
+          <button className="gl-btn" style={{ fontSize: 12 }} onClick={askNotifications}><Bell size={12} /> Turn on</button>
+        )}
+      </div>
+
+      {settings.businessMode && (
+        <>
+          <div className="gl-label" style={{ marginTop: 16 }}>Mileage rate by year</div>
+          <p style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 0 }}>
+            The IRS rate changes annually. Each year keeps its own, so updating this year's
+            can't quietly revalue a return you've already filed. A year with no rate of its
+            own inherits the most recent earlier one.
+          </p>
+          {activeYears.slice(0, 6).map((y) => (
+            <div className="gl-row" key={`rate-${y}`}>
+              <span className="gl-mono" style={{ width: 46, color: "var(--dim)" }}>{y}</span>
+              <div style={{ flex: 1, fontSize: 11.5, color: "var(--dim)" }}>
+                {hasOwnRate(settings, y) ? "set for this year" : "inherited"}
+              </div>
+              <input className="gl-input gl-mono" type="number" min="0" max="10" step="0.001"
+                style={{ width: 96, padding: "4px 8px" }}
+                aria-label={`Mileage rate for ${y}`}
+                key={`mr-${y}-${rateForYear(settings, y)}`}
+                defaultValue={rateForYear(settings, y).toFixed(3)}
+                onBlur={(e) => {
+                  const next = setRateForYear(settings.mileageRates, y, parseFloat(e.target.value));
+                  save({ mileageRates: next });
+                }} />
+            </div>
+          ))}
+
+          <div className="gl-label" style={{ marginTop: 16 }}>Filed years</div>
+          <p style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 0 }}>
+            Locking a year refuses edits to expenses, mileage, and income dated in it — including
+            moving a record out of it. It's a guardrail against changing a return that's already
+            been filed, not a permission: you can unlock any year here.
+          </p>
+          {activeYears.slice(0, 6).map((y) => {
+            const isLocked = locked.includes(y);
+            return (
+              <div className="gl-row" key={`lock-${y}`}>
+                <span className="gl-mono" style={{ width: 46, color: "var(--dim)" }}>{y}</span>
+                <div style={{ flex: 1, fontSize: 12.5, color: isLocked ? "var(--brass)" : "var(--dim)" }}>
+                  {isLocked ? "Filed — edits refused" : "Open for edits"}
+                </div>
+                <button className="gl-btn" style={{ padding: "3px 9px", fontSize: 11.5 }}
+                  onClick={() => save({ lockedYears: toggleYearLock(settings, y) })}>
+                  {isLocked ? <><LockOpen size={11} /> Unlock</> : <><Lock size={11} /> Mark filed</>}
+                </button>
+              </div>
+            );
+          })}
+        </>
       )}
 
       {groups.length > 0 && (

@@ -85,3 +85,13 @@ table.gl-table{width:100%;border-collapse:collapse;font-size:13.5px}
   .gl-day .gl-dotrow{display:flex}
 }
 @media(prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
+
+/* Section switcher — self-employment lives in its own space, not as extra tabs. */
+.gl-sections{display:inline-flex;gap:2px;padding:3px;margin-bottom:10px;
+  background:var(--raised);border:1px solid var(--line);border-radius:11px}
+.gl-section{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border:0;
+  border-radius:8px;background:transparent;color:var(--dim);font:inherit;font-size:13px;
+  font-weight:500;cursor:pointer}
+.gl-section:hover{color:var(--text)}
+.gl-section[aria-selected="true"]{background:var(--fern);color:#fff}
+.gl-section-note{font-size:11.5px;color:var(--dim);margin:0 0 10px;max-width:640px}

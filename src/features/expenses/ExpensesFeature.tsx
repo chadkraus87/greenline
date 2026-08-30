@@ -29,14 +29,19 @@ export function ExpenseForm({ initial, categories, defaultDate, prefill, busines
       * ((TAX_LINE_BY_ID.get(f.taxCategory)?.deductiblePct ?? 100) / 100)
     : 0;
   const save = async () => {
-    await act.saveExpense({
-      id: initial?.id, title: sanitize(f.title), amount: num(f.amount),
-      categoryId: f.categoryId, date: f.date, merchant: sanitize(f.merchant), notes: sanitize(f.notes),
-      receiptPath,
-      business: f.business,
-      businessPct: Math.max(0, Math.min(100, parseFloat(f.businessPct) || 100)),
-      taxCategory: f.taxCategory || undefined,
-    });
+    try {
+      await act.saveExpense({
+        id: initial?.id, title: sanitize(f.title), amount: num(f.amount),
+        categoryId: f.categoryId, date: f.date, merchant: sanitize(f.merchant), notes: sanitize(f.notes),
+        receiptPath,
+        business: f.business,
+        businessPct: Math.max(0, Math.min(100, parseFloat(f.businessPct) || 100)),
+        taxCategory: f.taxCategory || undefined,
+      });
+    } catch (e) {
+      // A filed-year lock lands here; the message says which year and how to lift it.
+      return toast((e as Error).message || "Couldn't save", "clay");
+    }
     toast(initial ? "Expense updated" : "Expense added");
     onClose();
   };
@@ -117,6 +122,7 @@ export function ExpensesView({ month, categories, allExpenses, search, onAdd, on
   { month: MonthModel; categories: Category[]; allExpenses: Expense[]; search: string; onAdd: () => void; onEdit: (e: Expense) => void;
     onScanned: (p: ReceiptPrefill) => void; onImport: () => void; onUndoable: (label: string, undo: act.UndoFn | null) => void;
     categorizable?: number; onBulkCategorize?: () => void }) {
+  const toast = useToast();
   const list = month.expenses
     .filter((e) => `${e.title} ${e.merchant ?? ""} ${e.notes ?? ""}`.toLowerCase().includes(search))
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -157,7 +163,7 @@ export function ExpensesView({ month, categories, allExpenses, search, onAdd, on
                     <td className="gl-mono" style={{ textAlign: "right", fontWeight: 600 }}>{money(e.amount)}</td>
                     <td style={{ whiteSpace: "nowrap", textAlign: "right" }}>
                       <button className="gl-icon-btn" onClick={() => onEdit(e)} aria-label="Edit expense"><Pencil size={13} /></button>{" "}
-                      <button className="gl-icon-btn" onClick={async () => onUndoable("Expense deleted", await act.deleteExpense(e.id))} aria-label="Delete expense"><Trash2 size={13} /></button>
+                      <button className="gl-icon-btn" onClick={async () => { try { onUndoable("Expense deleted", await act.deleteExpense(e.id)); } catch (err) { toast((err as Error).message, "clay"); } }} aria-label="Delete expense"><Trash2 size={13} /></button>
                     </td>
                   </tr>
                 );

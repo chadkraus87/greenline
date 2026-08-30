@@ -2,6 +2,7 @@ import { supabase } from "../lib/supabase";
 import type { Bill, CalendarShare, CalEvent, Category, Debt, Expense, Goal, IncomeSource, Mileage, ScannedReceipt, ScannedStatement, SharePermission, SinkingFund } from "../types";
 import { round2 } from "../lib/money";
 import { emitDataChange } from "../data/sync";
+import { guardYears } from "./lockState";
 
 /** All mutations in one place. Every write emits a change so the UI refetches.
  *  Deletes return an undo closure that re-inserts the exact row. */
@@ -63,6 +64,7 @@ export const deleteIncome = async (id: string): Promise<UndoFn | null> => {
   return undoInsert("incomes", i);
 };
 export const toggleIncomeReceived = async (id: string, date: string) => {
+  guardYears(date);
   const i = await getRow("incomes", id);
   if (!i) return;
   const received = (i.received ?? {}) as Record<string, boolean>;
@@ -79,21 +81,35 @@ export const saveExpense = async (f: Omit<Expense, "id"> & { id?: string }) => {
     business_pct: f.business ? (f.businessPct ?? 100) : 100,
     tax_category: f.business ? (f.taxCategory ?? null) : null,
   };
-  if (f.id) await table("expenses").update(row).eq("id", f.id);
-  else await table("expenses").insert(row);
+  if (f.id) {
+    // Both dates: moving an expense out of a filed year changes that year too.
+    const prev = await getRow("expenses", f.id);
+    guardYears(f.date, prev?.date as string | undefined);
+    await table("expenses").update(row).eq("id", f.id);
+  } else {
+    guardYears(f.date);
+    await table("expenses").insert(row);
+  }
   done();
 };
 
 // --- Mileage (standard-rate deduction log; not a cash transaction) ---
 export const saveMileage = async (f: Omit<Mileage, "id"> & { id?: string }) => {
   const row = { date: f.date, miles: f.miles, purpose: f.purpose, from_location: f.from ?? null, to_location: f.to ?? null };
-  if (f.id) await table("mileage").update(row).eq("id", f.id);
-  else await table("mileage").insert(row);
+  if (f.id) {
+    const prev = await getRow("mileage", f.id);
+    guardYears(f.date, prev?.date as string | undefined);
+    await table("mileage").update(row).eq("id", f.id);
+  } else {
+    guardYears(f.date);
+    await table("mileage").insert(row);
+  }
   done();
 };
 export const deleteMileage = async (id: string): Promise<UndoFn | null> => {
   const m = await getRow("mileage", id);
   if (!m) return null;
+  guardYears(m.date as string | undefined);
   await table("mileage").delete().eq("id", id);
   done();
   return undoInsert("mileage", m);
@@ -102,6 +118,8 @@ export const deleteMileage = async (id: string): Promise<UndoFn | null> => {
 /** Bulk insert from a CSV import. Chunked so a large statement can't time out. */
 export const bulkAddExpenses = async (items: Omit<Expense, "id">[]): Promise<number> => {
   if (items.length === 0) return 0;
+  // Checked up front so a mixed import fails before writing half of it.
+  guardYears(...items.map((i) => i.date));
   const rows = items.map((f) => ({
     title: f.title, amount: f.amount, category_id: f.categoryId || null,
     date: f.date, merchant: f.merchant ?? null, notes: f.notes ?? null,
@@ -262,9 +280,30 @@ export const receiptUrl = async (path: string): Promise<string | null> => {
 export const deleteExpense = async (id: string): Promise<UndoFn | null> => {
   const e = await getRow("expenses", id);
   if (!e) return null;
+  guardYears(e.date as string | undefined);
   await table("expenses").delete().eq("id", id);
   done();
   return undoInsert("expenses", e);
+};
+
+/**
+ * Collapses a scanned receipt and its card charge into one expense.
+ *
+ * The survivor keeps the receipt path, so the image is still referenced and
+ * must NOT be removed from storage — this deletes the duplicate row only.
+ */
+export const mergeReceiptIntoCharge = async (merged: Expense, dropId: string): Promise<void> => {
+  const dropped = await getRow("expenses", dropId);
+  guardYears(merged.date, dropped?.date as string | undefined);
+  await table("expenses").update({
+    title: merged.title, amount: merged.amount, category_id: merged.categoryId || null, date: merged.date,
+    merchant: merged.merchant ?? null, notes: merged.notes ?? null, receipt_path: merged.receiptPath ?? null,
+    business: merged.business ?? false,
+    business_pct: merged.business ? (merged.businessPct ?? 100) : 100,
+    tax_category: merged.business ? (merged.taxCategory ?? null) : null,
+  }).eq("id", merged.id);
+  await table("expenses").delete().eq("id", dropId);
+  done();
 };
 
 // --- Goals ---

@@ -6,6 +6,19 @@ type Row = Record<string, unknown>;
 const n = (v: unknown, fb = 0): number => { const x = Number(v); return Number.isFinite(x) ? x : fb; };
 const s = (v: unknown): string => (v == null ? "" : String(v));
 const map = (v: unknown): Record<string, boolean> => (v && typeof v === "object" ? (v as Record<string, boolean>) : {});
+/** jsonb object of year -> number, e.g. mileage rates. Bad shapes degrade to {}. */
+const numMap = (v: unknown): Record<string, number> => {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+  const out: Record<string, number> = {};
+  for (const [k, raw] of Object.entries(v as Record<string, unknown>)) {
+    const x = Number(raw);
+    if (Number.isFinite(x)) out[k] = x;
+  }
+  return out;
+};
+/** jsonb array of years. */
+const intList = (v: unknown): number[] =>
+  Array.isArray(v) ? v.map(Number).filter((x) => Number.isInteger(x)) : [];
 
 export const settingsFromRow = (r: Row): Settings => ({
   theme: r.theme === "light" ? "light" : "dark",
@@ -17,6 +30,8 @@ export const settingsFromRow = (r: Row): Settings => ({
   rolloverBudgets: Boolean(r.rollover_budgets),
   businessMode: Boolean(r.business_mode),
   mileageRate: n(r.mileage_rate, 0.7),
+  mileageRates: numMap(r.mileage_rates),
+  lockedYears: intList(r.locked_years),
   businessName: r.business_name == null ? undefined : s(r.business_name),
 });
 
@@ -78,6 +93,12 @@ export const settingsToRow = (v: Settings) => ({
   business_mode: v.businessMode,
   mileage_rate: v.mileageRate,
   business_name: v.businessName ?? null,
+  // Always sent, including when empty: omitting an empty value would leave a
+  // stale one in the database, so unlocking your last filed year wouldn't
+  // stick. patchSettings handles a database that hasn't had migration 0005
+  // applied yet.
+  mileage_rates: v.mileageRates ?? {},
+  locked_years: v.lockedYears ?? [],
 });
 export const categoryToRow = (c: Category, i = 0) => ({ id: c.id, name: c.name, color: c.color, monthly_limit: c.limit, sort_order: i });
 export const incomeToRow = (v: IncomeSource) => ({ id: v.id, name: v.name, amount: v.amount, frequency: v.frequency, anchor_date: v.anchorDate, received: v.received, tax_rate: v.taxRate ?? 0, business: v.business ?? false });

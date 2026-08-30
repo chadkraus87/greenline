@@ -119,7 +119,7 @@ export function DayDetail({ date, month, myId, ownerEmailById, onClose, onAddExp
           <CircleDollarSign size={15} color="var(--fern)" />
           <span style={{ flex: 1 }}>{o.name}</span>
           <span className="gl-mono" style={{ color: "var(--fern)" }}>{money(o.amount, true)}</span>
-          <button className="gl-btn" style={{ padding: "4px 9px", fontSize: 12 }} onClick={() => act.toggleIncomeReceived(o.sourceId, o.date)}>
+          <button className="gl-btn" style={{ padding: "4px 9px", fontSize: 12 }} onClick={() => { void act.toggleIncomeReceived(o.sourceId, o.date).catch(() => {}); }}>
             {o.received ? "Received ✓" : "Mark received"}
           </button>
         </div>

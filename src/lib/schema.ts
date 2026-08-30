@@ -52,6 +52,8 @@ export const settingsSchema = z.object({
   rolloverBudgets: z.boolean().default(false),
   businessMode: z.boolean().default(false),
   mileageRate: z.number().min(0).max(10).default(0.70),
+  mileageRates: z.record(z.string().regex(/^\d{4}$/), z.number().min(0).max(10)).optional(),
+  lockedYears: z.array(z.number().int().min(1900).max(9999)).optional(),
   businessName: z.string().max(120).optional(),
 });
 

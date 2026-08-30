@@ -3,6 +3,7 @@ import type { AppData, Settings, Category } from "../types";
 import { validateImport } from "../lib/backup";
 import { emitDataChange } from "../data/sync";
 import * as M from "./mappers";
+import { setLockState } from "./lockState";
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: "dark", clock24: false, startBalance: 0,
@@ -29,15 +30,46 @@ async function currentUserId(): Promise<string | null> {
 
 export async function getSettings(): Promise<Settings> {
   const { data } = await supabase.from("settings").select("*").maybeSingle();
-  return data ? M.settingsFromRow(data) : DEFAULT_SETTINGS;
+  const settings = data ? M.settingsFromRow(data) : DEFAULT_SETTINGS;
+  // Keep the mutation layer's copy of the filed-year locks current.
+  setLockState(settings);
+  return settings;
 }
+
+/** Columns added by migration 0005; absent on a database that hasn't run it. */
+const MIGRATION_0005_COLUMNS = ["mileage_rates", "locked_years"] as const;
+
+/** Postgres "column does not exist" / PostgREST "column not found in schema cache". */
+const isMissingColumn = (error: { code?: string; message?: string } | null): boolean =>
+  !!error && (error.code === "42703" || error.code === "PGRST204" ||
+    MIGRATION_0005_COLUMNS.some((c) => error.message?.includes(c)));
 
 export async function patchSettings(patch: Partial<Settings>): Promise<void> {
   const uid = await currentUserId();
   if (!uid) return;
   const cur = await getSettings();
   const next = { ...cur, ...patch };
-  await supabase.from("settings").upsert({ user_id: uid, ...M.settingsToRow(next) });
+  const row: Record<string, unknown> = { user_id: uid, ...M.settingsToRow(next) };
+
+  const { error } = await supabase.from("settings").upsert(row);
+  if (error) {
+    // Before migration 0005 those two columns don't exist, and sending them
+    // would fail the whole row — including unrelated settings like the theme.
+    // Retry without them so everything else keeps working; only per-year rates
+    // and filed-year locks are unavailable until the migration is applied.
+    if (!isMissingColumn(error)) {
+      // Every other settings write in the app is fire-and-forget, so throwing
+      // here would surface as an unhandled rejection rather than a message.
+      console.error("Settings save failed:", error);
+      return;
+    }
+    for (const c of MIGRATION_0005_COLUMNS) delete row[c];
+    const retry = await supabase.from("settings").upsert(row);
+    if (retry.error) throw retry.error;
+    if (patch.mileageRates || patch.lockedYears) {
+      throw new Error("Per-year rates and filed-year locks need database migration 0005. Other settings were saved.");
+    }
+  }
   emitDataChange();
 }
 

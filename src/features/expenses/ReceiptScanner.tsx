@@ -4,6 +4,8 @@ import type { Category, Expense, ScannedReceipt } from "../../types";
 import { buildMerchantIndex, suggestCategory, suggestionLabel } from "../../lib/autoCategorize";
 import * as act from "../../db/actions";
 import { useToast } from "../../hooks/useToasts";
+import { offlineQueueAvailable, queueReceipt } from "../../pwa/offlineQueue";
+import { useAuth } from "../../auth/AuthProvider";
 
 export interface ReceiptPrefill {
   title: string; amount: string; date: string; merchant: string;
@@ -21,6 +23,7 @@ const MAX_BYTES = 10 * 1024 * 1024;
 export function ReceiptScanner({ categories, expenses = [], onScanned, style }:
   { categories: Category[]; expenses?: Expense[]; onScanned: (p: ReceiptPrefill) => void; style?: React.CSSProperties }) {
   const toast = useToast();
+  const { session } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
 
@@ -32,8 +35,29 @@ export function ReceiptScanner({ categories, expenses = [], onScanned, style }:
     return hit?.id ?? categories[0]?.id ?? "";
   };
 
+  /**
+   * Keeps the photo when there's nothing to upload it to.
+   *
+   * Receipts get photographed on job sites with no signal, and the paper is
+   * usually gone by the time anyone notices the scan failed. Scanning needs
+   * the network, so a queued photo uploads later and lands in the Receipts
+   * vault as unfiled, ready to attach to an expense.
+   */
+  const park = async (file: File, why: string) => {
+    const userId = session?.user.id;
+    if (!offlineQueueAvailable() || !userId) return false;
+    try {
+      await queueReceipt(file, userId);
+      toast(`${why} — photo saved, it'll upload when you're back online`, "brass");
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const handle = async (file: File) => {
     if (file.size > MAX_BYTES) return toast("That image is over 10 MB — try a smaller photo.", "brass");
+    if (!navigator.onLine && (await park(file, "You're offline"))) return;
     setBusy(true);
     let path = "";
     try {
@@ -58,6 +82,10 @@ export function ReceiptScanner({ categories, expenses = [], onScanned, style }:
       if (r.confidence === "low") toast("Hard to read — double-check the amount and date", "brass");
       else if (!r.total) toast("Couldn't find a total — enter it manually", "brass");
     } catch (e) {
+      // The upload itself failing is almost always connectivity; once it's
+      // stored, a failed *scan* is recoverable from the vault, so only park
+      // the photo when we never got it uploaded.
+      if (!path && (await park(file, "Couldn't reach the server"))) return setBusy(false);
       toast((e as Error).message || "Scan failed", "clay");
     } finally {
       setBusy(false);
