@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { Pencil, Trash2, ScanLine, Upload, Briefcase, Wand2 } from "lucide-react";
+import { fallbackCategoryId } from "../../lib/autoCategorize";
+import { Pencil, Trash2, ScanLine, Upload, Briefcase, Wand2, Landmark } from "lucide-react";
 import type { Category, Expense, MonthModel } from "../../types";
 import { Modal, Field, FormActions, ViewHeader, Empty } from "../../components/ui";
+import { ExpenseHistory } from "./ExpenseHistory";
 import { money, num, sanitize } from "../../lib/money";
 import * as act from "../../db/actions";
 import { useToast } from "../../hooks/useToasts";
@@ -15,7 +17,7 @@ export function ExpenseForm({ initial, categories, defaultDate, prefill, busines
   const [f, setF] = useState({
     title: prefill?.title ?? initial?.title ?? "",
     amount: prefill?.amount ?? initial?.amount?.toString() ?? "",
-    categoryId: prefill?.categoryId || initial?.categoryId || categories[0]?.id || "misc",
+    categoryId: prefill?.categoryId || initial?.categoryId || fallbackCategoryId(categories) || "misc",
     date: prefill?.date || initial?.date || defaultDate,
     merchant: prefill?.merchant ?? initial?.merchant ?? "",
     notes: initial?.notes ?? "",
@@ -50,7 +52,7 @@ export function ExpenseForm({ initial, categories, defaultDate, prefill, busines
       {prefill && (
         <div style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 12px", borderRadius: 9,
           background: prefill.confidence === "high" ? "var(--fern-soft)" : "var(--brass-soft)", marginTop: 6, marginBottom: 4 }}>
-          <ScanLine size={15} color={prefill.confidence === "high" ? "var(--fern)" : "var(--brass)"} style={{ flexShrink: 0, marginTop: 1 }} />
+          <ScanLine aria-hidden size={15} color={prefill.confidence === "high" ? "var(--fern)" : "var(--brass)"} style={{ flexShrink: 0, marginTop: 1 }} />
           <div style={{ fontSize: 12.5 }}>
             Read from your receipt ({prefill.confidence} confidence). <strong>Check the amount and date</strong> before saving — scanning isn't perfect.
           </div>
@@ -67,7 +69,7 @@ export function ExpenseForm({ initial, categories, defaultDate, prefill, busines
             {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           {prefill?.categorySource && (
-            <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 3 }}>Auto-filled {prefill.categorySource} — change it if wrong</div>
+            <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 3 }}>Auto-filled {prefill.categorySource} — change it if wrong</div>
           )}
         </Field>
         <Field label="Merchant"><input className="gl-input" value={f.merchant} onChange={(e) => setF({ ...f, merchant: e.target.value })} /></Field>
@@ -78,7 +80,7 @@ export function ExpenseForm({ initial, categories, defaultDate, prefill, busines
         <div style={{ borderTop: "1px solid var(--line)", marginTop: 14, paddingTop: 12 }}>
           <label style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer", fontSize: 13.5 }}>
             <input type="checkbox" checked={f.business} onChange={(e) => setF({ ...f, business: e.target.checked })} />
-            <Briefcase size={14} /> Business expense
+            <Briefcase aria-hidden size={14} /> Business expense
           </label>
           {f.business && (
             <>
@@ -95,7 +97,7 @@ export function ExpenseForm({ initial, categories, defaultDate, prefill, busines
                 </Field>
               </div>
               {f.taxCategory && TAX_LINE_BY_ID.get(f.taxCategory)?.hint && (
-                <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 2 }}>
+                <div style={{ fontSize: 12.5, color: "var(--dim)", marginTop: 2 }}>
                   {TAX_LINE_BY_ID.get(f.taxCategory)!.hint}
                 </div>
               )}
@@ -104,7 +106,7 @@ export function ExpenseForm({ initial, categories, defaultDate, prefill, busines
                 {TAX_LINE_BY_ID.get(f.taxCategory)?.deductiblePct === 50 && " — meals are 50% deductible"}
               </div>
               {!f.taxCategory && (
-                <div style={{ fontSize: 11.5, color: "var(--brass)", marginTop: 4 }}>
+                <div style={{ fontSize: 12.5, color: "var(--brass)", marginTop: 4 }}>
                   Pick a category or this won't count toward your deductions.
                 </div>
               )}
@@ -113,15 +115,16 @@ export function ExpenseForm({ initial, categories, defaultDate, prefill, busines
         </div>
       )}
 
+      {initial && <ExpenseHistory expenseId={initial.id} categories={categories} />}
       <FormActions onCancel={onClose} onSave={save} saveLabel={initial ? "Save changes" : "Add expense"} disabled={!f.title.trim() || !num(f.amount) || !f.date} />
     </Modal>
   );
 }
 
-export function ExpensesView({ month, categories, allExpenses, search, onAdd, onEdit, onScanned, onImport, onUndoable, categorizable = 0, onBulkCategorize }:
+export function ExpensesView({ month, categories, allExpenses, search, onAdd, onEdit, onScanned, onImport, onUndoable, categorizable = 0, onBulkCategorize, bankNew = 0, onReviewBank }:
   { month: MonthModel; categories: Category[]; allExpenses: Expense[]; search: string; onAdd: () => void; onEdit: (e: Expense) => void;
     onScanned: (p: ReceiptPrefill) => void; onImport: () => void; onUndoable: (label: string, undo: act.UndoFn | null) => void;
-    categorizable?: number; onBulkCategorize?: () => void }) {
+    categorizable?: number; onBulkCategorize?: () => void; bankNew?: number; onReviewBank?: () => void }) {
   const toast = useToast();
   const list = month.expenses
     .filter((e) => `${e.title} ${e.merchant ?? ""} ${e.notes ?? ""}`.toLowerCase().includes(search))
@@ -129,14 +132,19 @@ export function ExpensesView({ month, categories, allExpenses, search, onAdd, on
   return (
     <div className="gl-card">
       <ViewHeader title="Expenses" sub={`${money(month.expensesTotal)} in day-to-day spending this month`} onAdd={onAdd} addLabel="Add expense" />
-      <div style={{ padding: "0 14px 10px", display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <ReceiptScanner categories={categories} expenses={allExpenses} onScanned={onScanned} style={{ fontSize: 12 }} />
-        <button className="gl-btn" style={{ fontSize: 12 }} onClick={onImport}>
-          <Upload size={13} /> Import / scan statement
+      <div style={{ padding: "0 18px 14px", display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {bankNew > 0 && onReviewBank && (
+          <button className="gl-btn primary" onClick={onReviewBank}>
+            <Landmark size={16} aria-hidden /> Review {bankNew} from your bank
+          </button>
+        )}
+        <ReceiptScanner categories={categories} expenses={allExpenses} onScanned={onScanned} />
+        <button className="gl-btn" onClick={onImport}>
+          <Upload size={16} aria-hidden /> Import or scan a statement
         </button>
         {categorizable > 0 && onBulkCategorize && (
-          <button className="gl-btn" style={{ fontSize: 12 }} onClick={onBulkCategorize}>
-            <Wand2 size={13} /> Auto-categorize {categorizable}
+          <button className="gl-btn" onClick={onBulkCategorize}>
+            <Wand2 size={16} aria-hidden /> Auto-categorize {categorizable}
           </button>
         )}
       </div>
@@ -153,7 +161,7 @@ export function ExpensesView({ month, categories, allExpenses, search, onAdd, on
                     <td className="gl-mono" style={{ color: "var(--dim)" }}>{e.date.slice(5)}</td>
                     <td>
                       {e.title}{e.merchant ? <span style={{ color: "var(--dim)" }}> · {e.merchant}</span> : ""}
-                      {e.receiptPath && <ScanLine size={11} style={{ marginLeft: 5, verticalAlign: "middle", color: "var(--dim)" }} aria-label="Has receipt" />}
+                      {e.receiptPath && <ScanLine aria-hidden size={11} style={{ marginLeft: 5, verticalAlign: "middle", color: "var(--dim)" }} aria-label="Has receipt" />}
                     </td>
                     <td>
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
@@ -162,8 +170,8 @@ export function ExpensesView({ month, categories, allExpenses, search, onAdd, on
                     </td>
                     <td className="gl-mono" style={{ textAlign: "right", fontWeight: 600 }}>{money(e.amount)}</td>
                     <td style={{ whiteSpace: "nowrap", textAlign: "right" }}>
-                      <button className="gl-icon-btn" onClick={() => onEdit(e)} aria-label="Edit expense"><Pencil size={13} /></button>{" "}
-                      <button className="gl-icon-btn" onClick={async () => { try { onUndoable("Expense deleted", await act.deleteExpense(e.id)); } catch (err) { toast((err as Error).message, "clay"); } }} aria-label="Delete expense"><Trash2 size={13} /></button>
+                      <button className="gl-icon-btn" onClick={() => onEdit(e)} aria-label="Edit expense"><Pencil aria-hidden size={13} /></button>{" "}
+                      <button className="gl-icon-btn" onClick={async () => { try { onUndoable("Expense deleted", await act.deleteExpense(e.id)); } catch (err) { toast((err as Error).message, "clay"); } }} aria-label="Delete expense"><Trash2 aria-hidden size={13} /></button>
                     </td>
                   </tr>
                 );

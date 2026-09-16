@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import type { CalendarShare } from "../types";
 import { listCalendarShares } from "../db/actions";
 import { onDataChange } from "../data/sync";
+import { DEMO } from "../dev/demo";
 
 /** Calendar-sharing links in both directions, refreshed on any mutation. */
 export function useShares(): { shares: CalendarShare[]; reload: () => void } {
   const [shares, setShares] = useState<CalendarShare[]>([]);
 
   const load = useCallback(async () => {
+    if ((import.meta.env.DEV && DEMO)) return;
     try { setShares(await listCalendarShares()); }
     catch { /* not signed in yet, or not approved — leave empty */ }
   }, []);

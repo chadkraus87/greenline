@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Search, FileText, ExternalLink, Briefcase, X, FilePlus2, Trash2, Link2 } from "lucide-react";
+import { Search, FileText, ExternalLink, Briefcase, X, FilePlus2, Trash2, Link2, Paperclip } from "lucide-react";
 import type { Category, Expense } from "../../types";
 import { ViewHeader, Empty } from "../../components/ui";
 import { money } from "../../lib/money";
@@ -13,11 +13,13 @@ import { useToast } from "../../hooks/useToasts";
  * short-lived signed URL rather than exposing a public link.
  */
 export function ReceiptVault({ expenses, categories, businessMode, search = "", duplicateCount = 0,
-  onEdit, onFile, onUnfiledCount, onReviewDuplicates }:
+  onEdit, onFile, onUnfiledCount, onReviewDuplicates, onAttach }:
   { expenses: Expense[]; categories: Category[]; businessMode: boolean; search?: string;
     duplicateCount?: number;
     onEdit: (e: Expense) => void; onFile: (path: string) => void;
-    onUnfiledCount?: (n: number) => void; onReviewDuplicates?: () => void }) {
+    onUnfiledCount?: (n: number) => void; onReviewDuplicates?: () => void;
+    /** Attach an unfiled receipt to an expense that already exists. */
+    onAttach?: (path: string, uploadedAt: string | null) => void }) {
   const toast = useToast();
   const [ownQ, setOwnQ] = useState("");
   // The header search wins while it has text, so one search box covers receipts
@@ -90,11 +92,11 @@ export function ReceiptVault({ expenses, categories, businessMode, search = "", 
       {duplicateCount > 0 && onReviewDuplicates && (
         <div style={{ margin: "0 14px 12px", padding: "10px 12px", borderRadius: 9, background: "var(--brass-soft)",
           display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <Link2 size={14} color="var(--brass)" style={{ flexShrink: 0 }} />
+          <Link2 aria-hidden size={14} color="var(--brass)" style={{ flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 200, fontSize: 12.5 }}>
             {duplicateCount} receipt{duplicateCount === 1 ? "" : "s"} look{duplicateCount === 1 ? "s" : ""} like the same
             purchase as an imported card charge
-            <div style={{ fontSize: 11.5, color: "var(--dim)" }}>
+            <div style={{ fontSize: 12.5, color: "var(--dim)" }}>
               Counted twice until they're merged, so your totals read high.
             </div>
           </div>
@@ -107,21 +109,25 @@ export function ReceiptVault({ expenses, categories, businessMode, search = "", 
           <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>
             {unfiled.length} unfiled receipt{unfiled.length === 1 ? "" : "s"}
           </div>
-          <div style={{ fontSize: 11.5, color: "var(--dim)", marginBottom: 8 }}>
+          <div style={{ fontSize: 12.5, color: "var(--dim)", marginBottom: 8 }}>
             Scanned but not yet attached to an expense. File them so they appear in your records and tax package.
           </div>
           {unfiled.map((f) => (
-            <div key={f.path} style={{ display: "flex", gap: 6, alignItems: "center", padding: "4px 0" }}>
-              <FileText size={13} color="var(--brass)" style={{ flexShrink: 0 }} />
-              <span style={{ flex: 1, minWidth: 0, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <div key={f.path} style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 0", flexWrap: "wrap" }}>
+              <FileText aria-hidden size={13} color="var(--brass)" style={{ flexShrink: 0 }} />
+              <span style={{ flex: 1, minWidth: 110, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {f.createdAt ? f.createdAt.slice(0, 10) : f.path.split("/").pop()}
               </span>
-              <button className="gl-btn" style={{ padding: "3px 8px", fontSize: 11.5 }} onClick={() => viewUnfiled(f.path)}>View</button>
-              <button className="gl-btn primary" style={{ padding: "3px 8px", fontSize: 11.5 }} onClick={() => onFile(f.path)}>
-                <FilePlus2 size={11} /> File it
+              <button className="gl-btn quiet" onClick={() => viewUnfiled(f.path)}>View</button>
+              {onAttach && (
+                <button className="gl-btn" onClick={() => onAttach(f.path, f.createdAt || null)} title="Attach to an expense you already have">
+                  <Paperclip size={15} aria-hidden /> Attach
+                </button>
+              )}
+              <button className="gl-btn primary" onClick={() => onFile(f.path)} title="Create a new expense from this receipt">
+                <FilePlus2 size={15} aria-hidden /> New expense
               </button>
-              <button className="gl-icon-btn" style={{ width: 26, height: 26 }} aria-label="Delete unfiled receipt"
-                onClick={() => discard(f.path)}><Trash2 size={12} /></button>
+              <button className="gl-icon-btn" aria-label="Delete unfiled receipt" onClick={() => discard(f.path)}><Trash2 aria-hidden size={16} /></button>
             </div>
           ))}
         </div>
@@ -129,7 +135,7 @@ export function ReceiptVault({ expenses, categories, businessMode, search = "", 
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "0 14px 12px", alignItems: "center" }}>
         <div style={{ position: "relative", flex: "1 1 200px" }}>
-          <Search size={13} style={{ position: "absolute", left: 9, top: 10, color: "var(--dim)" }} />
+          <Search aria-hidden size={13} style={{ position: "absolute", left: 9, top: 10, color: "var(--dim)" }} />
           <input className="gl-input" value={q} onChange={(e) => setOwnQ(e.target.value)}
             placeholder="Search merchant, amount, notes…" aria-label="Search receipts"
             style={{ paddingLeft: 28, fontSize: 13 }} />
@@ -173,8 +179,8 @@ export function ReceiptVault({ expenses, categories, businessMode, search = "", 
                     <td>
                       {e.merchant || e.title}
                       {e.business && (
-                        <span style={{ fontSize: 10.5, color: "var(--fern)", marginLeft: 6, whiteSpace: "nowrap" }}>
-                          <Briefcase size={9} style={{ verticalAlign: "middle" }} /> business
+                        <span style={{ fontSize: 12, color: "var(--fern)", marginLeft: 6, whiteSpace: "nowrap" }}>
+                          <Briefcase aria-hidden size={9} style={{ verticalAlign: "middle" }} /> business
                           {e.taxCategory && ` · ${TAX_LINE_BY_ID.get(e.taxCategory)?.label ?? ""}`}
                         </span>
                       )}
@@ -182,10 +188,10 @@ export function ReceiptVault({ expenses, categories, businessMode, search = "", 
                     <td style={{ color: "var(--dim)" }}>{catName(e.categoryId) || "—"}</td>
                     <td className="gl-mono" style={{ textAlign: "right", fontWeight: 600 }}>{money(e.amount)}</td>
                     <td style={{ whiteSpace: "nowrap", textAlign: "right" }}>
-                      <button className="gl-btn" style={{ padding: "3px 8px", fontSize: 11.5 }} onClick={() => open(e)}>
-                        <FileText size={12} /> View
+                      <button className="gl-btn" style={{ padding: "3px 8px", fontSize: 12.5 }} onClick={() => open(e)}>
+                        <FileText aria-hidden size={12} /> View
                       </button>{" "}
-                      <button className="gl-btn" style={{ padding: "3px 8px", fontSize: 11.5 }} onClick={() => onEdit(e)}>
+                      <button className="gl-btn" style={{ padding: "3px 8px", fontSize: 12.5 }} onClick={() => onEdit(e)}>
                         Edit
                       </button>
                     </td>
@@ -203,15 +209,15 @@ export function ReceiptVault({ expenses, categories, businessMode, search = "", 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: "1px solid var(--line)" }}>
               <div>
                 <div className="gl-display" style={{ fontSize: 16 }}>{viewing.expense.merchant || viewing.expense.title}</div>
-                <div style={{ fontSize: 11.5, color: "var(--dim)" }}>
+                <div style={{ fontSize: 12.5, color: "var(--dim)" }}>
                   {viewing.expense.date} · {money(viewing.expense.amount)}
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
                 <a className="gl-btn" href={viewing.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12 }}>
-                  <ExternalLink size={12} /> Open
+                  <ExternalLink aria-hidden size={12} /> Open
                 </a>
-                <button className="gl-icon-btn" onClick={() => setViewing(null)} aria-label="Close"><X size={15} /></button>
+                <button className="gl-icon-btn" onClick={() => setViewing(null)} aria-label="Close"><X aria-hidden size={15} /></button>
               </div>
             </div>
             <div style={{ padding: 14, textAlign: "center", background: "var(--raised)" }}>

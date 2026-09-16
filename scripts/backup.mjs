@@ -29,9 +29,14 @@ if (PASS.length < 12) {
   process.exit(1);
 }
 
+// mileage was missing here until 2026-09, so business trips were never backed up.
+// bank_credentials is deliberately absent: it's useless without the server-side
+// key, and a backup is the last place a credential should be copied to.
 const TABLES = [
   "profiles", "settings", "categories", "incomes", "bills",
   "expenses", "goals", "events", "sinking_funds", "debts",
+  "mileage", "calendar_shares", "expense_audit",
+  "bank_connections", "bank_accounts", "bank_transactions",
 ];
 const ITERATIONS = 210_000;
 

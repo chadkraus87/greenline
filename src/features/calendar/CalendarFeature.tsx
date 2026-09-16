@@ -31,7 +31,7 @@ export function Calendar({ y, m, month, myId, onDayClick }: { y: number; m: numb
     <div className="gl-card" style={{ padding: 12 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4, marginBottom: 4 }}>
         {DOW.map((d) => (
-          <div key={d} style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--dim)", textAlign: "center", padding: "2px 0" }}>{d}</div>
+          <div key={d} style={{ fontSize: 12, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--dim)", textAlign: "center", padding: "2px 0" }}>{d}</div>
         ))}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4 }}>
@@ -94,7 +94,7 @@ export function EventForm({ initial, defaultDate, writableCalendars = [], onClos
       <Field label="Notes">
         <input className="gl-input" value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} />
       </Field>
-      <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 4 }}>
+      <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 4 }}>
         Title and notes are visible to anyone you share this calendar with.
       </div>
       <FormActions onCancel={onClose} onSave={save} saveLabel={initial ? "Save changes" : "Add event"} disabled={!f.title.trim() || !f.date} />
@@ -116,7 +116,7 @@ export function DayDetail({ date, month, myId, ownerEmailById, onClose, onAddExp
       {empty && <p style={{ color: "var(--dim)", fontSize: 13.5 }}>Nothing scheduled. Add an expense or event below.</p>}
       {incs.map((o) => (
         <div key={o.key} className="gl-row" style={{ padding: "9px 0" }}>
-          <CircleDollarSign size={15} color="var(--fern)" />
+          <CircleDollarSign aria-hidden size={15} color="var(--fern)" />
           <span style={{ flex: 1 }}>{o.name}</span>
           <span className="gl-mono" style={{ color: "var(--fern)" }}>{money(o.amount, true)}</span>
           <button className="gl-btn" style={{ padding: "4px 9px", fontSize: 12 }} onClick={() => { void act.toggleIncomeReceived(o.sourceId, o.date).catch(() => {}); }}>
@@ -126,8 +126,8 @@ export function DayDetail({ date, month, myId, ownerEmailById, onClose, onAddExp
       ))}
       {bills.map((b) => (
         <div key={b.id} className="gl-row" style={{ padding: "9px 0" }}>
-          <Receipt size={15} color={b.overdue ? "var(--clay)" : "var(--brass)"} />
-          <span style={{ flex: 1 }}>{b.name}{b.overdue && <em style={{ color: "var(--clay)", fontSize: 11, marginLeft: 6 }}>overdue</em>}</span>
+          <Receipt aria-hidden size={15} color={b.overdue ? "var(--clay)" : "var(--brass)"} />
+          <span style={{ flex: 1 }}>{b.name}{b.overdue && <em style={{ color: "var(--clay)", fontSize: 12, marginLeft: 6 }}>overdue</em>}</span>
           <span className="gl-mono">{money(b.amount)}</span>
           <button className="gl-btn" style={{ padding: "4px 9px", fontSize: 12 }} onClick={() => act.toggleBillPaid(b.id, month.ym)}>
             {b.isPaid ? "Paid ✓" : "Mark paid"}
@@ -136,33 +136,33 @@ export function DayDetail({ date, month, myId, ownerEmailById, onClose, onAddExp
       ))}
       {exps.map((e) => (
         <div key={e.id} className="gl-row" style={{ padding: "9px 0" }}>
-          <Wallet size={15} color="var(--sky)" />
+          <Wallet aria-hidden size={15} color="var(--sky)" />
           <span style={{ flex: 1 }}>{e.title}</span>
           <span className="gl-mono">{money(e.amount)}</span>
-          <button className="gl-icon-btn" onClick={() => onEditExpense(e)} aria-label="Edit expense"><Pencil size={13} /></button>
+          <button className="gl-icon-btn" onClick={() => onEditExpense(e)} aria-label="Edit expense"><Pencil aria-hidden size={13} /></button>
         </div>
       ))}
       {evs.map((e) => {
         const shared = Boolean(myId && e.ownerId && e.ownerId !== myId);
         return (
           <div key={e.id} className="gl-row" style={{ padding: "9px 0" }}>
-            <CalendarDays size={15} color={e.color} />
+            <CalendarDays aria-hidden size={15} color={e.color} />
             <div style={{ flex: 1, minWidth: 0 }}>
               {e.title}
-              {e.notes && <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 1 }}>{e.notes}</div>}
+              {e.notes && <div style={{ fontSize: 12.5, color: "var(--dim)", marginTop: 1 }}>{e.notes}</div>}
               {shared && (
-                <div style={{ fontSize: 11, color: "var(--sky)" }}>
+                <div style={{ fontSize: 12, color: "var(--sky)" }}>
                   shared · {ownerEmailById?.get(e.ownerId!) ?? "another calendar"}
                 </div>
               )}
             </div>
-            <button className="gl-icon-btn" onClick={() => act.deleteEvent(e.id)} aria-label="Delete event"><Trash2 size={13} /></button>
+            <button className="gl-icon-btn" onClick={() => act.deleteEvent(e.id)} aria-label="Delete event"><Trash2 aria-hidden size={13} /></button>
           </div>
         );
       })}
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-        <button className="gl-btn primary" onClick={() => onAddExpense(date)}><Plus size={14} /> Expense</button>
-        <button className="gl-btn" onClick={() => onAddEvent(date)}><Plus size={14} /> Event</button>
+        <button className="gl-btn primary" onClick={() => onAddExpense(date)}><Plus aria-hidden size={14} /> Expense</button>
+        <button className="gl-btn" onClick={() => onAddEvent(date)}><Plus aria-hidden size={14} /> Event</button>
       </div>
     </Modal>
   );

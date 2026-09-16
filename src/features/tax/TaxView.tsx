@@ -10,6 +10,8 @@ import { taxReadiness, compareYears } from "../../lib/taxReadiness";
 import { createZip, textBytes, type ZipEntry } from "../../lib/zip";
 import { downloadReceipt } from "../../db/actions";
 import { useToast } from "../../hooks/useToasts";
+import { patchSettings } from "../../db/repo";
+import { isYearLocked, toggleYearLock } from "../../lib/yearLock";
 
 /** Schedule C picture for the year: what you earned, what's deductible, what to set aside. */
 export function TaxView({ data, year, unfiledReceipts = 0 }: { data: AppData; year: number; unfiledReceipts?: number }) {
@@ -21,6 +23,14 @@ export function TaxView({ data, year, unfiledReceipts = 0 }: { data: AppData; ye
   const today = new Date().toISOString().slice(0, 10);
 
   const [exporting, setExporting] = useState(false);
+  const locked = isYearLocked(data.settings, year);
+  // Remembered per device: "you exported this year's package" is a convenience
+  // marker for the close checklist, not a record anything depends on.
+  const exportKey = `gl-exported-${year}`;
+  const [exportedAt, setExportedAt] = useState<string | null>(() => {
+    try { return localStorage.getItem(exportKey); } catch { return null; }
+  });
+  const blockers = readiness.issues.filter((i) => i.level === "blocker").length;
   const [progress, setProgress] = useState("");
 
   /** Builds the CPA package: summary, itemized ledger, income, mileage, and every receipt image. */
@@ -52,6 +62,9 @@ export function TaxView({ data, year, unfiledReceipts = 0 }: { data: AppData; ye
       a.click();
       URL.revokeObjectURL(a.href);
       toast(`Tax package downloaded — ${receipts.length - missing} receipt${receipts.length - missing === 1 ? "" : "s"} included`);
+      const stamp = new Date().toISOString().slice(0, 10);
+      try { localStorage.setItem(exportKey, stamp); } catch { /* private mode — the checklist just won't remember */ }
+      setExportedAt(stamp);
     } catch (e) {
       toast((e as Error).message || "Export failed", "clay");
     } finally {
@@ -71,10 +84,65 @@ export function TaxView({ data, year, unfiledReceipts = 0 }: { data: AppData; ye
     toast("Summary downloaded");
   };
 
+  const closeOut = (
+    <>
+      {/* Closing a year is three steps that used to live in three places. */}
+      <section className="gl-card" style={{ padding: 18 }} aria-labelledby="gl-close-title">
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "baseline" }}>
+          <h2 id="gl-close-title" className="gl-display" style={{ fontSize: 20 }}>Close out {year}</h2>
+          {locked && <span className="gl-pill ok"><CheckCircle2 size={15} aria-hidden /> Filed</span>}
+        </div>
+        <p style={{ fontSize: 14, color: "var(--dim)", margin: "4px 0 14px" }}>
+          When the year's done: fix what's outstanding, send the package to your preparer, then lock the year so nothing changes afterwards.
+        </p>
+        <ol className="gl-steps">
+          <li className={blockers === 0 ? "done" : ""}>
+            <span className="gl-step-mark" aria-hidden>{blockers === 0 ? <CheckCircle2 aria-hidden size={18} /> : "1"}</span>
+            <div>
+              <strong>Clear anything blocking the numbers</strong>
+              <div className="gl-step-sub">
+                {blockers === 0 ? "Nothing blocking — the totals are complete." : `${blockers} item${blockers === 1 ? "" : "s"} below would change your totals.`}
+              </div>
+            </div>
+          </li>
+          <li className={exportedAt ? "done" : ""}>
+            <span className="gl-step-mark" aria-hidden>{exportedAt ? <CheckCircle2 aria-hidden size={18} /> : "2"}</span>
+            <div style={{ flex: 1 }}>
+              <strong>Send your preparer the package</strong>
+              <div className="gl-step-sub">{exportedAt ? `Downloaded on ${exportedAt}.` : "Every expense, income, mileage and receipt in one ZIP."}</div>
+            </div>
+            <button className={exportedAt ? "gl-btn" : "gl-btn primary"} disabled={exporting} onClick={exportPackage}>
+              {exporting ? <Loader2 size={15} className="gl-spin" aria-hidden /> : <Download size={15} aria-hidden />}
+              {exporting ? progress || "Building…" : exportedAt ? "Download again" : "Download package"}
+            </button>
+          </li>
+          <li className={locked ? "done" : ""}>
+            <span className="gl-step-mark" aria-hidden>{locked ? <CheckCircle2 aria-hidden size={18} /> : "3"}</span>
+            <div style={{ flex: 1 }}>
+              <strong>{locked ? `${year} is locked` : "Lock the year once it's filed"}</strong>
+              <div className="gl-step-sub">
+                {locked ? "Edits to expenses, income and mileage in this year are refused." : "Stops an accidental edit from changing a return that's already gone out."}
+              </div>
+            </div>
+            <button className="gl-btn" onClick={() => void patchSettings({ lockedYears: toggleYearLock(data.settings, year) })
+              .catch((e: Error) => toast(e.message, "clay"))}>
+              {locked ? "Unlock" : "Mark filed"}
+            </button>
+          </li>
+        </ol>
+      </section>
+    </>
+  );
+  // A past year is waiting to be closed, so that leads the page. The year in
+  // progress isn't ready to lock, so its checklist waits at the bottom.
+  const closeFirst = year < new Date().getFullYear();
+
   const nothingYet = s.businessIncome === 0 && s.totalDeductions === 0 && s.needsReview === 0;
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
+      {closeFirst && closeOut}
+
       <div className="gl-card">
         <ViewHeader title={`Tax summary — ${year}`}
           sub={data.settings.businessName || "Schedule C (sole proprietor)"} />
@@ -93,7 +161,7 @@ export function TaxView({ data, year, unfiledReceipts = 0 }: { data: AppData; ye
             {s.needsReview > 0 && (
               <div style={{ margin: "0 14px 12px", padding: "9px 12px", borderRadius: 9, background: "var(--brass-soft)",
                 display: "flex", gap: 8, alignItems: "flex-start" }}>
-                <AlertTriangle size={15} color="var(--brass)" style={{ flexShrink: 0, marginTop: 1 }} />
+                <AlertTriangle aria-hidden size={15} color="var(--brass)" style={{ flexShrink: 0, marginTop: 1 }} />
                 <div style={{ fontSize: 12.5 }}>
                   <strong>{s.needsReview} business expense{s.needsReview === 1 ? "" : "s"}</strong> ({money(s.uncategorized.gross)})
                   {" "}have no Schedule C category, so they aren't counted as deductions. Open them on the Expenses tab and pick one.
@@ -114,7 +182,7 @@ export function TaxView({ data, year, unfiledReceipts = 0 }: { data: AppData; ye
                   {s.lines.map((l) => (
                     <tr key={l.id}>
                       <td className="gl-mono" style={{ color: "var(--dim)" }}>{l.line}</td>
-                      <td>{l.label} <span style={{ color: "var(--dim)", fontSize: 11.5 }}>· {l.count}</span></td>
+                      <td>{l.label} <span style={{ color: "var(--dim)", fontSize: 12.5 }}>· {l.count}</span></td>
                       <td className="gl-mono" style={{ textAlign: "right", color: "var(--dim)" }}>{money(l.gross)}</td>
                       <td className="gl-mono" style={{ textAlign: "right", fontWeight: 600 }}>{money(l.deductible)}</td>
                     </tr>
@@ -122,7 +190,7 @@ export function TaxView({ data, year, unfiledReceipts = 0 }: { data: AppData; ye
                   {s.miles > 0 && (
                     <tr>
                       <td className="gl-mono" style={{ color: "var(--dim)" }}>9</td>
-                      <td>Mileage <span style={{ color: "var(--dim)", fontSize: 11.5 }}>· {s.miles.toLocaleString()} mi</span></td>
+                      <td>Mileage <span style={{ color: "var(--dim)", fontSize: 12.5 }}>· {s.miles.toLocaleString()} mi</span></td>
                       <td className="gl-mono" style={{ textAlign: "right", color: "var(--dim)" }}>—</td>
                       <td className="gl-mono" style={{ textAlign: "right", fontWeight: 600 }}>{money(s.mileageDeduction)}</td>
                     </tr>
@@ -133,15 +201,15 @@ export function TaxView({ data, year, unfiledReceipts = 0 }: { data: AppData; ye
 
             <div style={{ padding: "12px 14px", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <button className="gl-btn primary" style={{ fontSize: 12 }} disabled={exporting} onClick={exportPackage}>
-                {exporting ? <Loader2 size={13} className="gl-spin" /> : <Download size={13} />}
+                {exporting ? <Loader2 aria-hidden size={13} className="gl-spin" /> : <Download aria-hidden size={13} />}
                 {exporting ? "Preparing…" : "Export full package for my accountant"}
               </button>
               <button className="gl-btn" style={{ fontSize: 12 }} disabled={exporting} onClick={exportSummaryOnly}>
-                <FileSpreadsheet size={13} /> Summary only
+                <FileSpreadsheet aria-hidden size={13} /> Summary only
               </button>
               {progress && <span style={{ fontSize: 12, color: "var(--dim)" }}>{progress}</span>}
             </div>
-            <p style={{ fontSize: 11.5, color: "var(--dim)", padding: "0 14px 14px", margin: 0 }}>
+            <p style={{ fontSize: 12.5, color: "var(--dim)", padding: "0 14px 14px", margin: 0 }}>
               The full package is a .zip containing a summary, an itemized ledger with every business
               transaction dated and categorized, income detail, your mileage log, and every scanned
               receipt image named to match its row.
@@ -166,20 +234,20 @@ export function TaxView({ data, year, unfiledReceipts = 0 }: { data: AppData; ye
           </div>
           {readiness.issues.length === 0 ? (
             <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "0 14px 16px", fontSize: 13 }}>
-              <CheckCircle2 size={16} color="var(--fern)" />
+              <CheckCircle2 aria-hidden size={16} color="var(--fern)" />
               Everything is categorized, documented, and recorded. Export the package whenever you're ready.
             </div>
           ) : readiness.issues.map((i) => (
             <div className="gl-row" key={i.id} style={{ alignItems: "flex-start" }}>
-              {i.level === "blocker" ? <XCircle size={15} color="var(--clay)" style={{ flexShrink: 0, marginTop: 2 }} />
-                : i.level === "warning" ? <AlertTriangle size={15} color="var(--brass)" style={{ flexShrink: 0, marginTop: 2 }} />
-                : <Info size={15} color="var(--dim)" style={{ flexShrink: 0, marginTop: 2 }} />}
+              {i.level === "blocker" ? <XCircle aria-hidden size={15} color="var(--clay)" style={{ flexShrink: 0, marginTop: 2 }} />
+                : i.level === "warning" ? <AlertTriangle aria-hidden size={15} color="var(--brass)" style={{ flexShrink: 0, marginTop: 2 }} />
+                : <Info aria-hidden size={15} color="var(--dim)" style={{ flexShrink: 0, marginTop: 2 }} />}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 500, fontSize: 13.5 }}>
                   {i.title}{i.count > 0 && <span style={{ color: "var(--dim)" }}> · {i.count}{i.amount ? ` · ${money(i.amount)}` : ""}</span>}
                 </div>
                 <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 1 }}>{i.detail}</div>
-                <div style={{ fontSize: 11.5, color: "var(--sky)", marginTop: 2 }}>→ {i.fix}</div>
+                <div style={{ fontSize: 12.5, color: "var(--sky)", marginTop: 2 }}>→ {i.fix}</div>
               </div>
             </div>
           ))}
@@ -196,10 +264,10 @@ export function TaxView({ data, year, unfiledReceipts = 0 }: { data: AppData; ye
               ["Net profit", comparison.netProfit],
             ] as const).map(([label, v]) => (
               <div className="gl-card" key={label} style={{ padding: "10px 12px" }}>
-                <div style={{ fontSize: 11, color: "var(--dim)", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600 }}>{label}</div>
+                <div style={{ fontSize: 12, color: "var(--dim)", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600 }}>{label}</div>
                 <div className="gl-mono" style={{ fontSize: 18, fontWeight: 600 }}>{money(v.current)}</div>
-                <div style={{ fontSize: 11.5, color: v.delta >= 0 ? "var(--fern)" : "var(--clay)", display: "flex", alignItems: "center", gap: 3 }}>
-                  {v.delta >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                <div style={{ fontSize: 12.5, color: v.delta >= 0 ? "var(--fern)" : "var(--clay)", display: "flex", alignItems: "center", gap: 3 }}>
+                  {v.delta >= 0 ? <TrendingUp aria-hidden size={11} /> : <TrendingDown aria-hidden size={11} />}
                   {money(Math.abs(v.delta))} vs {money(v.prior)}
                 </div>
               </div>
@@ -222,7 +290,7 @@ export function TaxView({ data, year, unfiledReceipts = 0 }: { data: AppData; ye
                     <td className="gl-mono" style={{ textAlign: "right", color: "var(--dim)" }}>{money(l.prior)}</td>
                     <td className="gl-mono" style={{ textAlign: "right", color: l.delta >= 0 ? "var(--fern)" : "var(--clay)" }}>
                       {l.delta >= 0 ? "+" : "−"}{money(Math.abs(l.delta))}
-                      {l.changePct !== null && <span style={{ color: "var(--dim)", fontSize: 11 }}> ({l.changePct > 0 ? "+" : ""}{l.changePct}%)</span>}
+                      {l.changePct !== null && <span style={{ color: "var(--dim)", fontSize: 12 }}> ({l.changePct > 0 ? "+" : ""}{l.changePct}%)</span>}
                     </td>
                   </tr>
                 ))}
@@ -240,7 +308,7 @@ export function TaxView({ data, year, unfiledReceipts = 0 }: { data: AppData; ye
         return (
           <div style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "10px 12px", borderRadius: 9,
             background: "var(--brass-soft)" }}>
-            <CalendarClock size={15} color="var(--brass)" style={{ flexShrink: 0, marginTop: 1 }} />
+            <CalendarClock aria-hidden size={15} color="var(--brass)" style={{ flexShrink: 0, marginTop: 1 }} />
             <div style={{ fontSize: 12.5 }}>
               <strong>{next.label} estimated tax is due {next.due}</strong> ({days === 0 ? "today" : `in ${days} day${days === 1 ? "" : "s"}`}).
               {s.selfEmploymentTax > 0 && ` Your year-to-date SE estimate is ${money(s.selfEmploymentTax)}.`}
@@ -262,7 +330,7 @@ export function TaxView({ data, year, unfiledReceipts = 0 }: { data: AppData; ye
                 background: past ? "var(--dim)" : "var(--brass)" }} />
               <div style={{ flex: 1 }}>
                 <span style={{ fontWeight: 500 }}>{q.label}</span>
-                <span style={{ color: "var(--dim)", fontSize: 11.5 }}> · covers {q.covers}</span>
+                <span style={{ color: "var(--dim)", fontSize: 12.5 }}> · covers {q.covers}</span>
               </div>
               <span className="gl-mono" style={{ fontSize: 12.5, color: past ? "var(--dim)" : "var(--text)" }}>{q.due}</span>
             </div>
@@ -272,13 +340,14 @@ export function TaxView({ data, year, unfiledReceipts = 0 }: { data: AppData; ye
 
       <div style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "10px 12px", borderRadius: 9,
         background: "var(--raised)", border: "1px solid var(--line)" }}>
-        <Info size={15} color="var(--dim)" style={{ flexShrink: 0, marginTop: 1 }} />
+        <Info aria-hidden size={15} color="var(--dim)" style={{ flexShrink: 0, marginTop: 1 }} />
         <div style={{ fontSize: 12, color: "var(--dim)" }}>
           These are planning estimates, not tax advice or a filed return. The SE tax figure uses a flat
           15.3% of 92.35% of net profit and ignores the Social Security wage cap, other household income,
           and the deduction for half of SE tax. Have a tax professional review before filing.
         </div>
       </div>
+      {!closeFirst && closeOut}
     </div>
   );
 }

@@ -165,3 +165,16 @@ export function suggestionLabel(s: Suggestion): string {
   if (s.source === "rule") return "recognised merchant";
   return "";
 }
+
+/**
+ * Where spending nothing recognises should land.
+ *
+ * Not simply the first category: the default list starts with Housing, so an
+ * unknown coffee shop charge was silently filed as housing, inflating that
+ * budget with money that had nothing to do with it. A catch-all category is the
+ * honest home for "we don't know yet".
+ */
+export function fallbackCategoryId(categories: { id: string; name: string }[]): string {
+  const catchAll = categories.find((c) => /\b(misc|miscellaneous|other|uncategori[sz]ed|general)\b/i.test(c.name));
+  return (catchAll ?? categories[0])?.id ?? "";
+}

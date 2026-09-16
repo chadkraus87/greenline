@@ -44,7 +44,7 @@ export function GoalsView({ goals, onEdit, onUndoable }:
         const monthsLeft = g.monthly > 0 ? Math.ceil(Math.max(0, g.target - g.saved) / g.monthly) : null;
         return (
           <div className="gl-row" key={g.id}>
-            <PiggyBank size={16} color={g.color} style={{ flexShrink: 0 }} />
+            <PiggyBank aria-hidden size={16} color={g.color} style={{ flexShrink: 0 }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5 }}>
                 <span style={{ fontWeight: 500 }}>{g.name}</span>
@@ -61,8 +61,8 @@ export function GoalsView({ goals, onEdit, onUndoable }:
               onClick={() => { act.contributeToGoal(g.id); toast("Contribution logged"); }}>
               +{money(g.monthly || 0)}
             </button>
-            <button className="gl-icon-btn" onClick={() => onEdit(g)} aria-label="Edit goal"><Pencil size={13} /></button>
-            <button className="gl-icon-btn" onClick={async () => onUndoable("Goal deleted", await act.deleteGoal(g.id))} aria-label="Delete goal"><Trash2 size={13} /></button>
+            <button className="gl-icon-btn" onClick={() => onEdit(g)} aria-label="Edit goal"><Pencil aria-hidden size={13} /></button>
+            <button className="gl-icon-btn" onClick={async () => onUndoable("Goal deleted", await act.deleteGoal(g.id))} aria-label="Delete goal"><Trash2 aria-hidden size={13} /></button>
           </div>
         );
       })}

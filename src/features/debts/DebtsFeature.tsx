@@ -42,7 +42,7 @@ function PlanCard({ plan, title, recommended }: { plan: DebtPlan; title: string;
     <div className="gl-card" style={{ padding: 14, borderColor: recommended ? "var(--fern)" : "var(--line)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <span className="gl-display" style={{ fontSize: 15 }}>{title}</span>
-        {recommended && <span style={{ fontSize: 11, color: "var(--fern)", fontWeight: 600 }}>recommended</span>}
+        {recommended && <span style={{ fontSize: 12, color: "var(--fern)", fontWeight: 600 }}>recommended</span>}
       </div>
       {plan.feasible ? (
         <>
@@ -77,11 +77,11 @@ export function DebtsView({ debts, settings, onEdit, onUndoable }:
             <span style={{ width: 10, height: 10, borderRadius: 99, background: d.color, flexShrink: 0 }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 500 }}>{d.name}</div>
-              <div style={{ fontSize: 11.5, color: "var(--dim)" }}>{d.apr}% APR · {money(d.minPayment)}/mo minimum</div>
+              <div style={{ fontSize: 12.5, color: "var(--dim)" }}>{d.apr}% APR · {money(d.minPayment)}/mo minimum</div>
             </div>
             <span className="gl-mono" style={{ fontWeight: 600 }}>{money(d.balance)}</span>
-            <button className="gl-icon-btn" onClick={() => onEdit(d)} aria-label="Edit debt"><Pencil size={13} /></button>
-            <button className="gl-icon-btn" onClick={async () => onUndoable("Debt deleted", await act.deleteDebt(d.id))} aria-label="Delete debt"><Trash2 size={13} /></button>
+            <button className="gl-icon-btn" onClick={() => onEdit(d)} aria-label="Edit debt"><Pencil aria-hidden size={13} /></button>
+            <button className="gl-icon-btn" onClick={async () => onUndoable("Debt deleted", await act.deleteDebt(d.id))} aria-label="Delete debt"><Trash2 aria-hidden size={13} /></button>
           </div>
         ))}
       </div>
@@ -89,7 +89,7 @@ export function DebtsView({ debts, settings, onEdit, onUndoable }:
       {debts.length > 0 && (
         <div className="gl-card" style={{ padding: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-            <TrendingDown size={16} color="var(--fern)" />
+            <TrendingDown aria-hidden size={16} color="var(--fern)" />
             <span className="gl-display" style={{ fontSize: 15 }}>Payoff plan</span>
           </div>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "var(--dim)", marginBottom: 12 }}>

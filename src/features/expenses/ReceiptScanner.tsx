@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Camera, Loader2 } from "lucide-react";
 import type { Category, Expense, ScannedReceipt } from "../../types";
-import { buildMerchantIndex, suggestCategory, suggestionLabel } from "../../lib/autoCategorize";
+import { buildMerchantIndex, suggestCategory, suggestionLabel, fallbackCategoryId } from "../../lib/autoCategorize";
 import * as act from "../../db/actions";
 import { useToast } from "../../hooks/useToasts";
 import { offlineQueueAvailable, queueReceipt } from "../../pwa/offlineQueue";
@@ -20,8 +20,10 @@ const MAX_BYTES = 10 * 1024 * 1024;
 /** Snap a receipt → upload → extract → hand a pre-filled expense back for review.
  *  Nothing is ever saved automatically; OCR gets totals wrong often enough that
  *  silent entry would quietly corrupt the ledger. */
-export function ReceiptScanner({ categories, expenses = [], onScanned, style }:
-  { categories: Category[]; expenses?: Expense[]; onScanned: (p: ReceiptPrefill) => void; style?: React.CSSProperties }) {
+export function ReceiptScanner({ categories, expenses = [], onScanned, style, compact }:
+  { categories: Category[]; expenses?: Expense[]; onScanned: (p: ReceiptPrefill) => void; style?: React.CSSProperties;
+    /** Icon button for the top bar. */
+    compact?: boolean }) {
   const toast = useToast();
   const { session } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -29,10 +31,10 @@ export function ReceiptScanner({ categories, expenses = [], onScanned, style }:
 
   const matchCategory = (hint: string): string => {
     const h = hint.trim().toLowerCase();
-    if (!h) return categories[0]?.id ?? "";
+    if (!h) return fallbackCategoryId(categories);
     const hit = categories.find((c) => c.name.toLowerCase() === h)
       ?? categories.find((c) => c.name.toLowerCase().includes(h) || h.includes(c.name.toLowerCase()));
-    return hit?.id ?? categories[0]?.id ?? "";
+    return hit?.id ?? fallbackCategoryId(categories);
   };
 
   /**
@@ -94,10 +96,17 @@ export function ReceiptScanner({ categories, expenses = [], onScanned, style }:
 
   return (
     <>
-      <button className="gl-btn" style={style} disabled={busy} onClick={() => inputRef.current?.click()}>
-        {busy ? <Loader2 size={14} className="gl-spin" /> : <Camera size={14} />}
-        {busy ? "Reading receipt…" : "Scan receipt"}
-      </button>
+      {compact ? (
+        <button className="gl-icon-btn" disabled={busy} onClick={() => inputRef.current?.click()}
+          aria-label={busy ? "Reading receipt" : "Scan a receipt"} title="Scan a receipt">
+          {busy ? <Loader2 aria-hidden size={18} className="gl-spin" /> : <Camera aria-hidden size={18} />}
+        </button>
+      ) : (
+        <button className="gl-btn" style={style} disabled={busy} onClick={() => inputRef.current?.click()}>
+          {busy ? <Loader2 size={16} className="gl-spin" aria-hidden /> : <Camera size={16} aria-hidden />}
+          {busy ? "Reading receipt…" : "Scan receipt"}
+        </button>
+      )}
       <input ref={inputRef} type="file" accept="image/*,application/pdf" capture="environment" hidden
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handle(f); e.target.value = ""; }} />
     </>

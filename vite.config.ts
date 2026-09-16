@@ -21,8 +21,8 @@ export default defineConfig({
         name: "Greenline — Monthly Budget",
         short_name: "Greenline",
         description: "A private monthly budget tracker. Your data is secured to your own account.",
-        theme_color: "#0E1512",
-        background_color: "#0E1512",
+        theme_color: "#0A100E",
+        background_color: "#0A100E",
         display: "standalone",
         start_url: "/",
         icons: [

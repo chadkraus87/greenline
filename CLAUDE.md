@@ -37,6 +37,15 @@ the month's health as spending happens against it.
    HSTS and frame-deny (`vercel.json` / `public/_headers`). If you add a
    third-party script or embed, update the CSP rather than loosening it.
 
+## Working notes
+- **See the signed-in UI:** `npm run dev`, then open `/?demo` (fixture data, fake admin). Every
+  demo check must be written `import.meta.env.DEV && DEMO` — a bare `DEMO` check once shipped
+  fixture data in a production build; `demoGate.test.ts` enforces it.
+- **Applying a migration:** `supabase db query --linked -f <file>`. Never `supabase db push` — the
+  remote history uses different names and would replay the schema from 0001.
+- `supabase/functions/_shared/` is imported by both an Edge Function and Vitest; keep it free of
+  Deno and browser-only APIs.
+
 ## Commands
 ```
 npm run dev

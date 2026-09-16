@@ -70,17 +70,17 @@ export function BackupModal({ onClose }: { onClose: () => void }) {
           placeholder="At least 8 characters" autoComplete="off" />
       </Field>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 16 }}>
-        <button className="gl-btn primary" onClick={exportEncrypted} disabled={busy}><Download size={14} /> Encrypted backup</button>
-        <button className="gl-btn" onClick={exportPlain} disabled={busy}><Download size={14} /> Plain JSON</button>
-        <button className="gl-btn" onClick={() => fileRef.current?.click()} disabled={busy}><Upload size={14} /> Restore…</button>
+        <button className="gl-btn primary" onClick={exportEncrypted} disabled={busy}><Download aria-hidden size={14} /> Encrypted backup</button>
+        <button className="gl-btn" onClick={exportPlain} disabled={busy}><Download aria-hidden size={14} /> Plain JSON</button>
+        <button className="gl-btn" onClick={() => fileRef.current?.click()} disabled={busy}><Upload aria-hidden size={14} /> Restore…</button>
         <input ref={fileRef} type="file" accept="application/json" hidden
           onChange={(e) => { const f = e.target.files?.[0]; if (f) importFile(f); e.target.value = ""; }} />
       </div>
       <div style={{ borderTop: "1px solid var(--line)", marginTop: 16, paddingTop: 14 }}>
         <div className="gl-label" style={{ margin: "0 0 8px" }}>Export to spreadsheet (CSV)</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button className="gl-btn" onClick={exportExpensesCsv} disabled={busy}><FileSpreadsheet size={14} /> Expenses (for taxes)</button>
-          <button className="gl-btn" onClick={exportBillsCsv} disabled={busy}><FileSpreadsheet size={14} /> Recurring &amp; subscriptions</button>
+          <button className="gl-btn" onClick={exportExpensesCsv} disabled={busy}><FileSpreadsheet aria-hidden size={14} /> Expenses (for taxes)</button>
+          <button className="gl-btn" onClick={exportBillsCsv} disabled={busy}><FileSpreadsheet aria-hidden size={14} /> Recurring &amp; subscriptions</button>
         </div>
       </div>
     </Modal>

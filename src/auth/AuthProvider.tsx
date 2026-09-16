@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
+import { DEMO } from "../dev/demo";
 
 export interface Profile { id: string; email: string; role: "admin" | "user"; status: "pending" | "approved" | "rejected"; }
 
@@ -59,8 +60,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => { active = false; };
   }, [session, fetchProfile]);
 
+  // Dev-only: a stand-in signed-in admin so the app can be looked at. (import.meta.env.DEV && DEMO) is a
+  // constant `false` in production builds, so this is compiled out.
+  const demoSession = (import.meta.env.DEV && DEMO) ? ({ user: { id: "demo-user", email: "demo@example.com" } } as unknown as Session) : null;
+  const demoProfile: Profile | null = (import.meta.env.DEV && DEMO) ? { id: "demo-user", email: "demo@example.com", role: "admin", status: "approved" } : null;
+
   const value: AuthState = {
-    session, profile, loading, recovering,
+    session: demoSession ?? session, profile: demoProfile ?? profile,
+    loading: (import.meta.env.DEV && DEMO) ? false : loading, recovering,
     signIn: async (email, password) => {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       return { error: error?.message ?? null };

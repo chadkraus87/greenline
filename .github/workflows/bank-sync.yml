@@ -1,0 +1,29 @@
+name: Bank sync
+
+# Pulls new transactions from SimpleFIN for every connected account.
+# Every 6 hours at :17 — SimpleFIN asks apps to stagger off the hour, and the
+# function itself skips anything synced in the last 4 hours, so this stays far
+# below the bridge's 24-requests-a-day limit.
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger bank sync
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Bank sync secrets aren't configured; nothing to do."
+            exit 0
+          fi
+          curl --fail-with-body -sS -X POST "$SUPABASE_URL/functions/v1/bank-sync" \
+            -H "x-cron-secret: $CRON_SECRET" -H "content-type: application/json" -d '{}'

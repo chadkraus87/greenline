@@ -3,7 +3,7 @@ import { Check } from "lucide-react";
 import { Modal, Empty } from "../../components/ui";
 import type { Category, Expense } from "../../types";
 import { money } from "../../lib/money";
-import { buildMerchantIndex, suggestCategory, suggestionLabel } from "../../lib/autoCategorize";
+import { buildMerchantIndex, suggestCategory, suggestionLabel, fallbackCategoryId } from "../../lib/autoCategorize";
 import { TAX_LINE_BY_ID } from "../../lib/tax";
 import * as act from "../../db/actions";
 import { useToast } from "../../hooks/useToasts";
@@ -28,13 +28,13 @@ export function BulkCategorizeModal({ expenses, categories, businessMode, onClos
 
   const proposals = useMemo<Proposal[]>(() => {
     const index = buildMerchantIndex(expenses);
-    const defaultCat = categories[0]?.id;
+    const defaultCats = new Set([categories[0]?.id, fallbackCategoryId(categories)]);
 
     return expenses
       .filter((e) => {
         // Worth proposing if it has no category at all, or it's business
         // spending with no Schedule C line (which silently loses the deduction).
-        const noCategory = !e.categoryId || !categories.some((c) => c.id === e.categoryId) || e.categoryId === defaultCat;
+        const noCategory = !e.categoryId || !categories.some((c) => c.id === e.categoryId) || defaultCats.has(e.categoryId);
         const noTaxLine = businessMode && e.business && !e.taxCategory;
         return noCategory || noTaxLine;
       })
@@ -116,7 +116,7 @@ export function BulkCategorizeModal({ expenses, categories, businessMode, onClos
                           {TAX_LINE_BY_ID.get(p.taxCategory)?.label} (line {TAX_LINE_BY_ID.get(p.taxCategory)?.line})
                         </div>
                       )}
-                      {p.reason && <div style={{ color: "var(--dim)", fontSize: 11 }}>{p.reason}</div>}
+                      {p.reason && <div style={{ color: "var(--dim)", fontSize: 12 }}>{p.reason}</div>}
                     </td>
                     <td className="gl-mono" style={{ textAlign: "right" }}>{money(p.expense.amount)}</td>
                   </tr>
@@ -127,7 +127,7 @@ export function BulkCategorizeModal({ expenses, categories, businessMode, onClos
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
             <button className="gl-btn" onClick={onClose}>Cancel</button>
             <button className="gl-btn primary" disabled={busy || selected.length === 0} onClick={applyAll}>
-              <Check size={14} /> Apply {selected.length || ""}
+              <Check aria-hidden size={14} /> Apply {selected.length || ""}
             </button>
           </div>
         </>
@@ -139,10 +139,10 @@ export function BulkCategorizeModal({ expenses, categories, businessMode, onClos
 /** Count of expenses the categorizer could improve — drives the prompt button. */
 export function countCategorizable(expenses: Expense[], categories: Category[], businessMode: boolean): number {
   const index = buildMerchantIndex(expenses);
-  const defaultCat = categories[0]?.id;
+  const defaultCats = new Set([categories[0]?.id, fallbackCategoryId(categories)]);
   let n = 0;
   for (const e of expenses) {
-    const noCategory = !e.categoryId || !categories.some((c) => c.id === e.categoryId) || e.categoryId === defaultCat;
+    const noCategory = !e.categoryId || !categories.some((c) => c.id === e.categoryId) || defaultCats.has(e.categoryId);
     const noTaxLine = businessMode && e.business && !e.taxCategory;
     if (!noCategory && !noTaxLine) continue;
     const s = suggestCategory(e.merchant || e.title, index, categories);

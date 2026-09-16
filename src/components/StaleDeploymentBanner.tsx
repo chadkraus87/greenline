@@ -22,13 +22,16 @@ export function StaleDeploymentBanner() {
   if (typeof window === "undefined" || !isPinnedDeployment(window.location.host)) return null;
   const url = `https://${CANONICAL_HOST}${window.location.pathname}`;
 
+  // The spacing lives here, not in a wrapper, so nothing takes up room when the
+  // banner isn't shown — an always-rendered wrapper once put a 12px gap above every page.
   return (
+    <div style={{ maxWidth: 1180, margin: "0 auto", padding: "12px 16px 0" }}>
     <div role="alert" style={{
       display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
       padding: "10px 14px", marginBottom: 12, borderRadius: 10,
       background: "var(--brass-soft)", border: "1px solid var(--brass)",
     }}>
-      <AlertTriangle size={16} color="var(--brass)" style={{ flexShrink: 0 }} />
+      <AlertTriangle aria-hidden size={16} color="var(--brass)" style={{ flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 240, fontSize: 12.5 }}>
         <strong>This is a pinned copy of an older build.</strong>
         <div style={{ color: "var(--dim)" }}>
@@ -39,6 +42,7 @@ export function StaleDeploymentBanner() {
       <a className="gl-btn primary" style={{ fontSize: 12.5, textDecoration: "none" }} href={url}>
         Open the live app
       </a>
+    </div>
     </div>
   );
 }

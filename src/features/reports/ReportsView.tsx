@@ -16,9 +16,9 @@ const fmtK = (v: number) => "$" + (Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) +
 function Tile({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: string }) {
   return (
     <div className="gl-card" style={{ padding: "12px 14px" }}>
-      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--dim)" }}>{label}</div>
+      <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--dim)" }}>{label}</div>
       <div className="gl-mono" style={{ fontSize: 20, fontWeight: 600, marginTop: 3, color: tone ?? "var(--text)" }}>{value}</div>
-      {sub && <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 2 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 12.5, color: "var(--dim)", marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
@@ -68,8 +68,8 @@ export function ReportsView({ month, categories, data, y, m, now }:
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" />
-            <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--dim)" }} />
-            <YAxis tick={{ fontSize: 11, fill: "var(--dim)" }} width={54} tickFormatter={fmtK} />
+            <XAxis dataKey="day" tick={{ fontSize: 12, fill: "var(--dim)" }} />
+            <YAxis tick={{ fontSize: 12, fill: "var(--dim)" }} width={54} tickFormatter={fmtK} />
             <Tooltip contentStyle={tooltipStyle} formatter={(v) => money(Number(v))} labelFormatter={(d) => `Day ${d}`} />
             <Area type="monotone" dataKey="balance" stroke="#46B380" strokeWidth={2} fill="url(#glf)" name="Balance" />
           </AreaChart>
@@ -82,10 +82,10 @@ export function ReportsView({ month, categories, data, y, m, now }:
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={history}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--dim)" }} />
-              <YAxis tick={{ fontSize: 11, fill: "var(--dim)" }} width={44} tickFormatter={fmtK} />
+              <XAxis dataKey="label" tick={{ fontSize: 12, fill: "var(--dim)" }} />
+              <YAxis tick={{ fontSize: 12, fill: "var(--dim)" }} width={44} tickFormatter={fmtK} />
               <Tooltip contentStyle={tooltipStyle} formatter={(v) => money(Number(v))} />
-              <Legend wrapperStyle={{ fontSize: 11.5 }} />
+              <Legend wrapperStyle={{ fontSize: 12.5 }} />
               <Bar dataKey="income" fill="#46B380" name="Income" radius={[3, 3, 0, 0]} />
               <Bar dataKey="spent" fill="#D9A441" name="Spent" radius={[3, 3, 0, 0]} />
             </BarChart>
@@ -96,8 +96,8 @@ export function ReportsView({ month, categories, data, y, m, now }:
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={history}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--dim)" }} />
-              <YAxis tick={{ fontSize: 11, fill: "var(--dim)" }} width={38} tickFormatter={(v) => `${v}%`} domain={[0, 100]} />
+              <XAxis dataKey="label" tick={{ fontSize: 12, fill: "var(--dim)" }} />
+              <YAxis tick={{ fontSize: 12, fill: "var(--dim)" }} width={38} tickFormatter={(v) => `${v}%`} domain={[0, 100]} />
               <Tooltip contentStyle={tooltipStyle} formatter={(v) => `${v}%`} />
               <Line type="monotone" dataKey="savingsRate" stroke="#5FA8D3" strokeWidth={2} name="Savings rate" dot={{ r: 2 }} />
             </LineChart>
@@ -115,7 +115,7 @@ export function ReportsView({ month, categories, data, y, m, now }:
                   {pieData.map((d, i) => <Cell key={i} fill={d.color} stroke="var(--surface)" />)}
                 </Pie>
                 <Tooltip contentStyle={tooltipStyle} formatter={(v) => money(Number(v))} />
-                <Legend wrapperStyle={{ fontSize: 11.5 }} />
+                <Legend wrapperStyle={{ fontSize: 12.5 }} />
               </PieChart>
             </ResponsiveContainer>
           )}
@@ -124,8 +124,8 @@ export function ReportsView({ month, categories, data, y, m, now }:
           <div className="gl-display" style={{ fontSize: 15, marginBottom: 8 }}>Budget vs commitments</div>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={barData} layout="vertical" margin={{ left: 8 }}>
-              <XAxis type="number" tick={{ fontSize: 11, fill: "var(--dim)" }} tickFormatter={fmtK} />
-              <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 11.5, fill: "var(--text)" }} />
+              <XAxis type="number" tick={{ fontSize: 12, fill: "var(--dim)" }} tickFormatter={fmtK} />
+              <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 12.5, fill: "var(--text)" }} />
               <Tooltip contentStyle={tooltipStyle} formatter={(v) => money(Number(v))} />
               <Bar dataKey="v" radius={[0, 6, 6, 0]}>{barData.map((d, i) => <Cell key={i} fill={d.color} />)}</Bar>
             </BarChart>
@@ -150,7 +150,7 @@ export function ReportsView({ month, categories, data, y, m, now }:
       {discovered.length > 0 && (
         <div className="gl-card" style={{ padding: 16 }}>
           <div className="gl-display" style={{ fontSize: 15, marginBottom: 4 }}>Repeating charges we spotted</div>
-          <p style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 0, marginBottom: 10 }}>
+          <p style={{ fontSize: 12.5, color: "var(--dim)", marginTop: 0, marginBottom: 10 }}>
             Found in your spending, not set up as bills — {money(discoveredMonthly)}/month
             ({money(discoveredMonthly * 12)}/year) in total. Add one as a bill to have it forecast.
           </p>
@@ -165,7 +165,7 @@ export function ReportsView({ month, categories, data, y, m, now }:
               <tbody>
                 {discovered.map((r) => (
                   <tr key={r.key}>
-                    <td>{r.merchant}<div style={{ fontSize: 11, color: "var(--dim)" }}>{r.occurrences} charges since {r.firstDate}</div></td>
+                    <td>{r.merchant}<div style={{ fontSize: 12, color: "var(--dim)" }}>{r.occurrences} charges since {r.firstDate}</div></td>
                     <td style={{ textTransform: "capitalize" }}>{r.cadence}</td>
                     <td className="gl-mono" style={{ textAlign: "right" }}>{money(r.typicalAmount)}</td>
                     <td className="gl-mono" style={{ textAlign: "right", fontWeight: 600 }}>{money(r.monthlyCost)}</td>
@@ -200,7 +200,7 @@ export function ReportsView({ month, categories, data, y, m, now }:
               </tbody>
             </table>
           </div>
-          <p style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 8, marginBottom: 0 }}>
+          <p style={{ fontSize: 12.5, color: "var(--dim)", marginTop: 8, marginBottom: 0 }}>
             Every recurring bill, annualized — the quickest way to spot subscription creep.
           </p>
         </div>

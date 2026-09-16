@@ -6,8 +6,14 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
  * Seven unlabelled icons in a row is a guessing game — the things people reach
  * for daily stay visible, and the rest move in here behind a label.
  */
-export function Menu({ label, icon, badge, children }:
-  { label: string; icon: ReactNode; badge?: number; children: (close: () => void) => ReactNode }) {
+export function Menu({ label, icon, badge, children, iconOnly, up, block }:
+  { label: string; icon: ReactNode; badge?: number; children: (close: () => void) => ReactNode;
+    /** Icon trigger for tight spaces; the label becomes its accessible name. */
+    iconOnly?: boolean;
+    /** Open upward — for a trigger pinned to the bottom of the sidebar. */
+    up?: boolean;
+    /** Stretch the trigger to its container's width. */
+    block?: boolean }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
 
@@ -27,17 +33,20 @@ export function Menu({ label, icon, badge, children }:
 
   return (
     <div ref={wrap} style={{ position: "relative" }}>
-      <button className="gl-btn" style={{ fontSize: 12.5, padding: "5px 10px", position: "relative" }}
-        aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        {icon} {label}
-        {!!badge && badge > 0 && (
-          <span style={{ position: "absolute", top: -5, right: -5, minWidth: 15, height: 15, borderRadius: 99,
-            background: "var(--brass)", color: "#fff", fontSize: 9.5, fontWeight: 700,
-            display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>{badge}</span>
-        )}
-      </button>
+      {iconOnly ? (
+        <button className="gl-icon-btn" style={{ position: "relative" }} aria-label={badge ? `${label}, ${badge} pending` : label}
+          aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+          {icon}
+          {!!badge && badge > 0 && <span className="gl-badge" style={{ position: "absolute", top: 2, right: 2 }} aria-hidden>{badge}</span>}
+        </button>
+      ) : (
+        <button className={block ? "gl-nav-item" : "gl-btn"} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+          {icon} <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
+          {!!badge && badge > 0 && <span className="gl-badge" style={{ marginLeft: block ? "auto" : 2 }} aria-hidden>{badge}</span>}
+        </button>
+      )}
       {open && (
-        <div role="menu" className="gl-menu">
+        <div role="menu" className={"gl-menu" + (up ? " up" : "")}>
           {children(() => setOpen(false))}
         </div>
       )}
@@ -51,11 +60,7 @@ export function MenuItem({ icon, children, onClick, badge }:
     <button role="menuitem" className="gl-menu-item" onClick={onClick}>
       {icon}
       <span style={{ flex: 1, textAlign: "left" }}>{children}</span>
-      {!!badge && badge > 0 && (
-        <span style={{ minWidth: 16, height: 16, borderRadius: 99, background: "var(--brass)", color: "#fff",
-          fontSize: 10, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center",
-          padding: "0 4px" }}>{badge}</span>
-      )}
+      {!!badge && badge > 0 && <span className="gl-badge">{badge}</span>}
     </button>
   );
 }

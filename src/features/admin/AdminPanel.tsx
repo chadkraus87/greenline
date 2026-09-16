@@ -33,13 +33,13 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
   const Row = ({ p }: { p: Profile }) => (
     <div className="gl-row">
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 500 }}>{p.email}{p.role === "admin" && <span style={{ color: "var(--fern)", fontSize: 11, marginLeft: 6 }}>admin</span>}</div>
-        <div style={{ fontSize: 11.5, color: p.status === "approved" ? "var(--fern)" : p.status === "rejected" ? "var(--clay)" : "var(--brass)" }}>{p.status}</div>
+        <div style={{ fontWeight: 500 }}>{p.email}{p.role === "admin" && <span style={{ color: "var(--fern)", fontSize: 12, marginLeft: 6 }}>admin</span>}</div>
+        <div style={{ fontSize: 12.5, color: p.status === "approved" ? "var(--fern)" : p.status === "rejected" ? "var(--clay)" : "var(--brass)" }}>{p.status}</div>
       </div>
       {p.role !== "admin" && (
         <>
-          {p.status !== "approved" && <button className="gl-btn" style={{ padding: "4px 9px", fontSize: 12 }} disabled={busy} onClick={() => setStatus(p.id, "approved")}><Check size={12} /> Approve</button>}
-          {p.status !== "rejected" && <button className="gl-btn" style={{ padding: "4px 9px", fontSize: 12, color: "var(--clay)" }} disabled={busy} onClick={() => setStatus(p.id, "rejected")}><X size={12} /> Reject</button>}
+          {p.status !== "approved" && <button className="gl-btn" style={{ padding: "4px 9px", fontSize: 12 }} disabled={busy} onClick={() => setStatus(p.id, "approved")}><Check aria-hidden size={12} /> Approve</button>}
+          {p.status !== "rejected" && <button className="gl-btn" style={{ padding: "4px 9px", fontSize: 12, color: "var(--clay)" }} disabled={busy} onClick={() => setStatus(p.id, "rejected")}><X aria-hidden size={12} /> Reject</button>}
         </>
       )}
     </div>
@@ -48,7 +48,7 @@ export function AdminPanel({ onClose }: { onClose: () => void }) {
   return (
     <Modal title="Admin — user access" onClose={onClose} wide>
       <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--dim)", fontSize: 12.5, margin: "4px 0 12px" }}>
-        <ShieldCheck size={15} color="var(--fern)" /> Approve who can use Greenline. Each person's data stays private to their account.
+        <ShieldCheck aria-hidden size={15} color="var(--fern)" /> Approve who can use Greenline. Each person's data stays private to their account.
       </div>
       <div className="gl-label" style={{ marginTop: 4 }}>Pending</div>
       {pending.length === 0 ? <Empty text="No pending requests." /> : pending.map((p) => <Row key={p.id} p={p} />)}

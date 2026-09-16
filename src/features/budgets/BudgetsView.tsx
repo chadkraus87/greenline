@@ -35,7 +35,7 @@ export function CategoryForm({ initial, categories, onClose }:
       <Field label="Monthly limit (optional)"><input className="gl-input gl-mono" type="number" min="0" step="0.01" value={f.limit} onChange={(e) => setF({ ...f, limit: e.target.value })} /></Field>
       <Field label="Color"><ColorPicker value={f.color} onChange={(c) => setF({ ...f, color: c })} /></Field>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16 }}>
-        {initial ? <button className="gl-btn" style={{ color: "var(--clay)", borderColor: "var(--clay)" }} onClick={del}><Trash2 size={13} /> Delete</button> : <span />}
+        {initial ? <button className="gl-btn" style={{ color: "var(--clay)", borderColor: "var(--clay)" }} onClick={del}><Trash2 aria-hidden size={13} /> Delete</button> : <span />}
         <div style={{ display: "flex", gap: 8 }}>
           <button className="gl-btn" onClick={onClose}>Cancel</button>
           <button className="gl-btn primary" disabled={!f.name.trim()} onClick={save}>{initial ? "Save" : "Add category"}</button>
@@ -71,7 +71,7 @@ export function BudgetsView({ month, categories, elapsedPct, rollover, rolloverO
 
       {pace.length > 0 && (
         <div style={{ margin: "0 14px 10px", padding: "9px 12px", borderRadius: 9, background: "var(--clay-soft)", display: "flex", gap: 8, alignItems: "flex-start" }}>
-          <AlertTriangle size={15} color="var(--clay)" style={{ flexShrink: 0, marginTop: 1 }} />
+          <AlertTriangle aria-hidden size={15} color="var(--clay)" style={{ flexShrink: 0, marginTop: 1 }} />
           <div style={{ fontSize: 12.5 }}>
             <strong>Spending ahead of pace</strong> ({pace[0].elapsedPct}% of the month elapsed):{" "}
             {pace.map((p) => `${p.name} (${p.spentPct}%)`).join(", ")}.
@@ -80,7 +80,7 @@ export function BudgetsView({ month, categories, elapsedPct, rollover, rolloverO
       )}
 
       <div style={{ padding: "0 14px 10px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <button className="gl-btn" style={{ fontSize: 12 }} onClick={apply503020}><Wand2 size={13} /> Apply 50/30/20 guide</button>
+        <button className="gl-btn" style={{ fontSize: 12 }} onClick={apply503020}><Wand2 aria-hidden size={13} /> Apply 50/30/20 guide</button>
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--dim)", cursor: "pointer" }}
           title="Envelope budgeting: unspent budget carries into next month">
           <input type="checkbox" checked={rolloverOn} onChange={(e) => patchSettings({ rolloverBudgets: e.target.checked })} />
@@ -111,7 +111,7 @@ export function BudgetsView({ month, categories, elapsedPct, rollover, rolloverO
                 </div>
               )}
               {carry > 0 && (
-                <div style={{ fontSize: 11, color: "var(--fern)", marginTop: 3 }}>
+                <div style={{ fontSize: 12, color: "var(--fern)", marginTop: 3 }}>
                   {money(c.limit)} budget + {money(carry)} rolled over
                 </div>
               )}
@@ -120,7 +120,7 @@ export function BudgetsView({ month, categories, elapsedPct, rollover, rolloverO
               aria-label={`Monthly limit for ${c.name}`}
               onBlur={(e) => act.setCategoryLimit(c.id, num(e.target.value))}
               style={{ width: 88, padding: "5px 8px", fontSize: 12.5 }} />
-            <button className="gl-icon-btn" onClick={() => onEditCategory(c)} aria-label={`Edit ${c.name}`}><Pencil size={13} /></button>
+            <button className="gl-icon-btn" onClick={() => onEditCategory(c)} aria-label={`Edit ${c.name}`}><Pencil aria-hidden size={13} /></button>
           </div>
         );
       })}

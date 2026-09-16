@@ -24,14 +24,14 @@ export function UpdateBanner() {
         background: "var(--raised)", border: "1px solid var(--line)",
         boxShadow: "0 8px 28px rgba(0,0,0,.38)",
       }}>
-      <ArrowUpCircle size={16} style={{ color: "var(--fern)", flexShrink: 0 }} />
+      <ArrowUpCircle aria-hidden size={16} style={{ color: "var(--fern)", flexShrink: 0 }} />
       <span style={{ fontSize: 13 }}>A new version of Greenline is ready.</span>
       <button className="gl-btn primary" style={{ padding: "4px 10px", fontSize: 12.5 }} onClick={reload}>
         Reload
       </button>
       <button className="gl-icon-btn" aria-label="Dismiss until next time" title="Later"
         onClick={() => setDismissed(true)}>
-        <X size={14} />
+        <X aria-hidden size={14} />
       </button>
     </div>
   );

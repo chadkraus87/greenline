@@ -75,18 +75,18 @@ export function ReservesView({ funds, onAdd, onEdit, onUndoable }:
         const pct = f.total > 0 ? Math.min(100, (f.saved / f.total) * 100) : 0;
         return (
           <div className="gl-row" key={f.id}>
-            <PiggyBank size={16} color={f.color} style={{ flexShrink: 0 }} />
+            <PiggyBank aria-hidden size={16} color={f.color} style={{ flexShrink: 0 }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5 }}>
                 <span style={{ fontWeight: 500 }}>{f.name}</span>
                 <span className="gl-mono" style={{ color: "var(--dim)" }}>{money(f.saved)} / {money(f.total)}{pct >= 100 ? " · ready 🎉" : ""}</span>
               </div>
               <div className="gl-track" style={{ marginTop: 5 }}><div className="gl-fill" style={{ width: `${pct}%`, background: f.color }} /></div>
-              <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 3 }}>{money(monthly)}/mo · due {f.dueDate}</div>
+              <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 3 }}>{money(monthly)}/mo · due {f.dueDate}</div>
             </div>
             <button className="gl-btn" style={{ padding: "4px 9px", fontSize: 12 }} onClick={() => { act.contributeToSinkingFund(f.id); toast("Contribution logged"); }}>+{money(monthly)}</button>
-            <button className="gl-icon-btn" onClick={() => onEdit(f)} aria-label="Edit reserve"><Pencil size={13} /></button>
-            <button className="gl-icon-btn" onClick={async () => onUndoable("Reserve deleted", await act.deleteSinkingFund(f.id))} aria-label="Delete reserve"><Trash2 size={13} /></button>
+            <button className="gl-icon-btn" onClick={() => onEdit(f)} aria-label="Edit reserve"><Pencil aria-hidden size={13} /></button>
+            <button className="gl-icon-btn" onClick={async () => onUndoable("Reserve deleted", await act.deleteSinkingFund(f.id))} aria-label="Delete reserve"><Trash2 aria-hidden size={13} /></button>
           </div>
         );
       })}

@@ -46,7 +46,7 @@ export function MileageForm({ initial, defaultDate, onClose }:
         <Field label="From (optional)"><input className="gl-input" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} /></Field>
         <Field label="To (optional)"><input className="gl-input" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} /></Field>
       </div>
-      <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 6 }}>
+      <div style={{ fontSize: 12.5, color: "var(--dim)", marginTop: 6 }}>
         The IRS wants the date, miles, and business purpose for each trip — that's what makes the deduction defensible.
       </div>
       <FormActions onCancel={onClose} onSave={save} saveLabel={initial ? "Save changes" : "Log trip"}
@@ -86,22 +86,22 @@ export function MileageView({ entries, settings, year, search = "", onAdd, onEdi
 
       <div className="gl-stats" style={{ padding: "0 14px 12px" }}>
         <div className="gl-card" style={{ padding: "10px 12px" }}>
-          <div style={{ fontSize: 11, color: "var(--dim)", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600 }}>Miles</div>
+          <div style={{ fontSize: 12, color: "var(--dim)", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600 }}>Miles</div>
           <div className="gl-mono" style={{ fontSize: 19, fontWeight: 600 }}>{miles.toLocaleString()}</div>
         </div>
         <div className="gl-card" style={{ padding: "10px 12px" }}>
-          <div style={{ fontSize: 11, color: "var(--dim)", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600 }}>Deduction</div>
+          <div style={{ fontSize: 12, color: "var(--dim)", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600 }}>Deduction</div>
           <div className="gl-mono" style={{ fontSize: 19, fontWeight: 600, color: "var(--fern)" }}>{money(deduction)}</div>
         </div>
         <div className="gl-card" style={{ padding: "10px 12px" }}>
-          <div style={{ fontSize: 11, color: "var(--dim)", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600 }}>Trips</div>
+          <div style={{ fontSize: 12, color: "var(--dim)", textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 600 }}>Trips</div>
           <div className="gl-mono" style={{ fontSize: 19, fontWeight: 600 }}>{thisYear.length}</div>
         </div>
       </div>
 
       <div style={{ padding: "0 14px 10px" }}>
         <button className="gl-btn" style={{ fontSize: 12 }} disabled={thisYear.length === 0} onClick={exportCsv}>
-          <Download size={13} /> Export mileage log
+          <Download aria-hidden size={13} /> Export mileage log
         </button>
       </div>
 
@@ -109,23 +109,23 @@ export function MileageView({ entries, settings, year, search = "", onAdd, onEdi
         <Empty text="No trips logged this year. Standard mileage is usually the largest deduction for anyone driving to clients or job sites." />
       ) : thisYear.map((m) => (
         <div className="gl-row" key={m.id}>
-          <Car size={15} color="var(--sky)" style={{ flexShrink: 0 }} />
+          <Car aria-hidden size={15} color="var(--sky)" style={{ flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 500 }}>{m.purpose}</div>
-            <div style={{ fontSize: 11.5, color: "var(--dim)" }}>
+            <div style={{ fontSize: 12.5, color: "var(--dim)" }}>
               {m.date}{m.from || m.to ? ` · ${m.from ?? "?"} → ${m.to ?? "?"}` : ""}
             </div>
           </div>
           <span className="gl-mono" style={{ fontWeight: 600 }}>{m.miles} mi</span>
           <span className="gl-mono" style={{ color: "var(--fern)", fontSize: 12.5 }}>{money(m.miles * rate)}</span>
-          <button className="gl-icon-btn" onClick={() => onEdit(m)} aria-label="Edit trip"><Pencil size={13} /></button>
+          <button className="gl-icon-btn" onClick={() => onEdit(m)} aria-label="Edit trip"><Pencil aria-hidden size={13} /></button>
           <button className="gl-icon-btn" aria-label="Delete trip"
-            onClick={async () => { try { onUndoable("Trip deleted", await act.deleteMileage(m.id)); } catch (e) { toast((e as Error).message, "clay"); } }}><Trash2 size={13} /></button>
+            onClick={async () => { try { onUndoable("Trip deleted", await act.deleteMileage(m.id)); } catch (e) { toast((e as Error).message, "clay"); } }}><Trash2 aria-hidden size={13} /></button>
         </div>
       ))}
 
       {thisYear.length > 0 && (
-        <p style={{ fontSize: 11.5, color: "var(--dim)", padding: "4px 14px 14px", margin: 0 }}>
+        <p style={{ fontSize: 12.5, color: "var(--dim)", padding: "4px 14px 14px", margin: 0 }}>
           Standard mileage and actual vehicle costs (gas, repairs) are an either/or choice — claiming
           mileage here means not also deducting those costs on Schedule C line 9.
         </p>

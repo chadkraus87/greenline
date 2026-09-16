@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Check, Copy, Pencil, Trash2, Pause, Play } from "lucide-react";
+import { Menu, MenuItem } from "../../components/Menu";
+import { fallbackCategoryId } from "../../lib/autoCategorize";
+import { Check, Copy, Pencil, Trash2, Pause, Play, MoreHorizontal } from "lucide-react";
 import type { Bill, Category, MonthModel, Priority } from "../../types";
 import { Modal, Field, FormActions, ViewHeader, Empty } from "../../components/ui";
 import { money, num, sanitize } from "../../lib/money";
@@ -11,7 +13,7 @@ export function BillForm({ initial, categories, onClose }: { initial?: Bill; cat
   const toast = useToast();
   const [f, setF] = useState({
     name: initial?.name ?? "", amount: initial?.amount?.toString() ?? "",
-    categoryId: initial?.categoryId ?? categories[0]?.id ?? "misc",
+    categoryId: initial?.categoryId ?? (fallbackCategoryId(categories) || "misc"),
     dueDay: initial?.dueDay?.toString() ?? "1", priority: initial?.priority ?? ("normal" as Priority),
     notes: initial?.notes ?? "",
   });
@@ -68,27 +70,36 @@ export function BillsView({ month, allBills, categories, search, onEdit, onUndoa
           <div className="gl-row" key={b.id}>
             <button className="gl-icon-btn" aria-label={b.isPaid ? "Mark unpaid" : "Mark paid"}
               onClick={() => act.toggleBillPaid(b.id, month.ym)}
-              style={b.isPaid ? { background: "var(--fern)", color: "#fff", borderColor: "var(--fern)" } : undefined}>
-              <Check size={14} />
+              style={b.isPaid ? { background: "var(--accent)", color: "var(--on-accent)", borderColor: "var(--accent)" } : undefined}>
+              <Check aria-hidden size={17} />
             </button>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 500, textDecoration: b.isPaid ? "line-through" : "none", opacity: b.isPaid ? 0.65 : 1 }}>{b.name}</div>
-              <div style={{ fontSize: 11.5, color: b.overdue ? "var(--clay)" : "var(--dim)" }}>
+              <div style={{ fontSize: 12.5, color: b.overdue ? "var(--clay)" : "var(--dim)" }}>
                 {MONTHS[due.getMonth()].slice(0, 3)} {b.day} · {when}{cat ? ` · ${cat.name}` : ""}{b.priority === "high" ? " · high priority" : ""}
               </div>
             </div>
             <span className="gl-mono" style={{ fontWeight: 600 }}>{money(b.amount)}</span>
-            <button className="gl-icon-btn" onClick={() => onEdit(b)} aria-label="Edit bill"><Pencil size={13} /></button>
-            <button className="gl-icon-btn" onClick={() => act.togglePauseBill(b.id)} aria-label="Pause bill" title="Pause (skip all months until resumed)"><Pause size={13} /></button>
-            <button className="gl-icon-btn" onClick={() => { act.duplicateBill(b.id); toast("Bill duplicated"); }} aria-label="Duplicate bill"><Copy size={13} /></button>
-            <button className="gl-icon-btn" onClick={async () => onUndoable("Bill deleted", await act.deleteBill(b.id))} aria-label="Delete bill"><Trash2 size={13} /></button>
+            <button className="gl-icon-btn" onClick={() => onEdit(b)} aria-label={`Edit ${b.name}`}><Pencil aria-hidden size={16} /></button>
+            {/* Four inline icons crushed the bill name to one word per line on a
+                phone. Edit stays one tap away; the rarer actions share a menu. */}
+            <Menu label={`More actions for ${b.name}`} icon={<MoreHorizontal aria-hidden size={18} />} iconOnly>
+              {(close) => (
+                <>
+                  <MenuItem icon={<Pause aria-hidden size={16} />} onClick={() => { close(); act.togglePauseBill(b.id); toast(`${b.name} paused`); }}>Pause</MenuItem>
+                  <MenuItem icon={<Copy aria-hidden size={16} />} onClick={() => { close(); act.duplicateBill(b.id); toast("Bill duplicated"); }}>Duplicate</MenuItem>
+                  <div className="gl-menu-sep" />
+                  <MenuItem icon={<Trash2 aria-hidden size={16} />} onClick={async () => { close(); onUndoable("Bill deleted", await act.deleteBill(b.id)); }}>Delete</MenuItem>
+                </>
+              )}
+            </Menu>
           </div>
         );
       })}
       {pausedBills.map((b) => (
         <div className="gl-row" key={b.id} style={{ opacity: 0.55 }}>
-          <button className="gl-icon-btn" onClick={() => act.togglePauseBill(b.id)} aria-label="Resume bill" title="Resume"><Play size={13} /></button>
-          <div style={{ flex: 1 }}>{b.name}<span style={{ fontSize: 11.5, color: "var(--dim)" }}> · paused</span></div>
+          <button className="gl-icon-btn" onClick={() => act.togglePauseBill(b.id)} aria-label={`Resume ${b.name}`} title="Resume"><Play aria-hidden size={16} /></button>
+          <div style={{ flex: 1 }}>{b.name}<span style={{ fontSize: 12.5, color: "var(--dim)" }}> · paused</span></div>
           <span className="gl-mono">{money(b.amount)}</span>
         </div>
       ))}

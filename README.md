@@ -120,6 +120,26 @@ supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 
 Roughly 1–2¢ per receipt. Capped at 40 scans/user/hour.
 
+## Bank sync (optional)
+
+Settings → **Bank sync** connects a bank through [SimpleFIN Bridge](https://bridge.simplefin.org/)
+(about $15/year, paid to SimpleFIN). It's **read-only by design** — the SimpleFIN protocol has no
+way to move money — and the bank login stays with SimpleFIN; Greenline never sees it.
+
+- The user pastes a one-time *setup token*; the `bank-sync` Edge Function claims it for an access
+  credential, encrypts that with AES-256-GCM using a key held only in the function's environment,
+  and stores the ciphertext in a table no client can read or write.
+- New transactions arrive every 6 hours (`.github/workflows/bank-sync.yml`) and when the app opens,
+  paced to stay well under SimpleFIN's 24-requests-a-day limit.
+- They land in a review inbox, categorized from your history. **Nothing becomes an expense until you
+  import it.**
+- Only SimpleFIN Bridge's own hosts are ever contacted, and redirects are refused, so a crafted token
+  can't aim the server elsewhere.
+
+Server secrets: `BANK_TOKEN_KEY` (32 random bytes, base64) and `CRON_SECRET` (also a GitHub
+Actions secret). Rotating `BANK_TOKEN_KEY` makes existing connections unreadable — they'd need
+reconnecting.
+
 ## Importing transactions
 
 Expenses tab → **Import / scan statement**. Three sources feed one review screen:
@@ -225,6 +245,18 @@ The worker is registered with plain browser APIs, not `registerSW()` from
 `virtual:pwa-register` — that helper keeps state we can't see and installs its
 own `controlling -> location.reload()` listener, which reloads the page unasked.
 
+## Change history
+
+Every insert, edit and delete of an expense is recorded by a database trigger into `expense_audit`,
+visible under **Change history** when editing an expense. Clients can read their own history but
+cannot write, edit or delete it — that's what makes it worth having.
+
+## Year-end close
+
+The Tax view walks through closing a year: clear anything blocking the numbers, download the
+package for your preparer, then lock the year so later edits are refused. Past years lead with
+this checklist; the year in progress keeps it at the bottom.
+
 ## Reminders
 
 Bill due dates and estimated-tax deadlines can be delivered as system notifications
@@ -233,9 +265,25 @@ which is not where a bill gets forgotten.
 
 ## Database migrations
 
-Migrations in `supabase/migrations/` are applied in order. **0005 must be applied** for
-per-year mileage rates and filed-year locks; until it is, those two features report that
-they need it and everything else keeps working.
+Migrations in `supabase/migrations/` are applied in order, one file at a time:
+
+```bash
+supabase db query --linked -f supabase/migrations/0007_tighten_bank_and_audit_grants.sql
+```
+
+Don't use `supabase db push` on this project: the remote migration history was recorded under
+different names, so `push` would try to replay the whole schema from `0001`.
+
+## Design
+
+"The green line": the app's answer to *what's genuinely left to spend?* is drawn as one line — the
+projected balance across the month, solid for what's happened and dashed for what's scheduled,
+above the buffer floor. Tokens live in `src/index.css` (evergreen-ink dark and warm-paper light
+themes, every text pairing checked at WCAG AA). Self-hosted Fraunces, Instrument Sans and Spline
+Sans Mono. Sidebar navigation from 1024px, a labelled bottom bar on phones.
+
+To look at the signed-in app without an account, run `npm run dev` and open `/?demo` — it renders
+on fixture data. Demo mode is compiled out of production builds (`src/lib/demoGate.test.ts`).
 
 ## Deployment
 

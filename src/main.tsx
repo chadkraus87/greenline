@@ -19,9 +19,7 @@ createRoot(document.getElementById("root")!).render(
         <ToastProvider>
           {/* Above everything: on a pinned deployment you're stuck at the
               sign-in screen too, with nothing explaining why. */}
-          <div style={{ maxWidth: 1080, margin: "0 auto", padding: "12px 16px 0" }}>
-            <StaleDeploymentBanner />
-          </div>
+          <StaleDeploymentBanner />
           <Root />
           {/* Outside Root so it shows on the sign-in and pending screens too. */}
           <UpdateBanner />

@@ -63,23 +63,23 @@ export function IncomeView({ month, incomes, search, onEdit, onUndoable }:
           <div className="gl-row" key={inc.id} style={{ alignItems: "flex-start" }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 500 }}>{inc.name}</div>
-              <div style={{ fontSize: 11.5, color: "var(--dim)" }}>
+              <div style={{ fontSize: 12.5, color: "var(--dim)" }}>
                 {money(inc.amount)} · {FREQS.find((x) => x.v === inc.frequency)?.l.toLowerCase()}
               </div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
                 {occs.map((o) => (
                   <button key={o.key} className="gl-btn"
-                    style={{ padding: "3px 8px", fontSize: 11.5, ...(o.received ? { background: "var(--fern-soft)", color: "var(--fern)" } : {}) }}
+                    style={{ padding: "3px 8px", fontSize: 12.5, ...(o.received ? { background: "var(--fern-soft)", color: "var(--fern)" } : {}) }}
                     onClick={() => { act.toggleIncomeReceived(inc.id, o.date).catch((e: Error) => toast(e.message, "clay")); }}>
                     Day {o.day} {o.received ? "✓" : ""}
                   </button>
                 ))}
-                {occs.length === 0 && <span style={{ fontSize: 11.5, color: "var(--dim)" }}>No payments this month</span>}
+                {occs.length === 0 && <span style={{ fontSize: 12.5, color: "var(--dim)" }}>No payments this month</span>}
               </div>
             </div>
             <span className="gl-mono" style={{ fontWeight: 600, color: "var(--fern)" }}>{money(occs.reduce((s, o) => s + o.amount, 0), true)}</span>
-            <button className="gl-icon-btn" onClick={() => onEdit(inc)} aria-label="Edit income"><Pencil size={13} /></button>
-            <button className="gl-icon-btn" onClick={async () => onUndoable("Income deleted", await act.deleteIncome(inc.id))} aria-label="Delete income"><Trash2 size={13} /></button>
+            <button className="gl-icon-btn" onClick={() => onEdit(inc)} aria-label="Edit income"><Pencil aria-hidden size={13} /></button>
+            <button className="gl-icon-btn" onClick={async () => onUndoable("Income deleted", await act.deleteIncome(inc.id))} aria-label="Delete income"><Trash2 aria-hidden size={13} /></button>
           </div>
         );
       })}

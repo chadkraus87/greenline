@@ -10,6 +10,7 @@ import { rateForYear, ratedYears, setRateForYear, hasOwnRate } from "../lib/mile
 import { lockedYears, toggleYearLock } from "../lib/yearLock";
 import { notificationPermission, requestNotificationPermission } from "../pwa/notifications";
 import { useToast } from "../hooks/useToasts";
+import { BankSyncPanel } from "./bank/BankSyncPanel";
 
 /** Preferences, including the self-employment switch that reveals business features. */
 export function SettingsModal({ settings, expenses = [], mileage = [], onClose }:
@@ -75,6 +76,9 @@ export function SettingsModal({ settings, expenses = [], mileage = [], onClose }
         </Field>
       </div>
 
+      <h3 className="gl-display" style={{ fontSize: 17, margin: "22px 0 8px" }}>Bank sync</h3>
+      <BankSyncPanel />
+
       <div className="gl-label" style={{ marginTop: 16 }}>Self-employment</div>
       <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", padding: "8px 0" }}>
         <input type="checkbox" checked={settings.businessMode} style={{ marginTop: 3 }}
@@ -87,7 +91,7 @@ export function SettingsModal({ settings, expenses = [], mileage = [], onClose }
           }} />
         <span>
           <span style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 500 }}>
-            <Briefcase size={14} /> I have self-employment income
+            <Briefcase aria-hidden size={14} /> I have self-employment income
           </span>
           <span style={{ display: "block", fontSize: 12, color: "var(--dim)", marginTop: 2 }}>
             Adds business tagging on expenses, a mileage log, and a Schedule C tax summary.
@@ -117,20 +121,20 @@ export function SettingsModal({ settings, expenses = [], mileage = [], onClose }
           reaches you if the app is already open.
         </div>
         {perms === "granted" ? (
-          <span style={{ fontSize: 12, color: "var(--fern)" }}><Bell size={12} /> On</span>
+          <span style={{ fontSize: 12, color: "var(--fern)" }}><Bell aria-hidden size={12} /> On</span>
         ) : perms === "unsupported" ? (
           <span style={{ fontSize: 12, color: "var(--dim)" }}>Not supported here</span>
         ) : perms === "denied" ? (
           <span style={{ fontSize: 12, color: "var(--dim)" }}>Blocked in browser settings</span>
         ) : (
-          <button className="gl-btn" style={{ fontSize: 12 }} onClick={askNotifications}><Bell size={12} /> Turn on</button>
+          <button className="gl-btn" style={{ fontSize: 12 }} onClick={askNotifications}><Bell aria-hidden size={12} /> Turn on</button>
         )}
       </div>
 
       {settings.businessMode && (
         <>
           <div className="gl-label" style={{ marginTop: 16 }}>Mileage rate by year</div>
-          <p style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 0 }}>
+          <p style={{ fontSize: 12.5, color: "var(--dim)", marginTop: 0 }}>
             The IRS rate changes annually. Each year keeps its own, so updating this year's
             can't quietly revalue a return you've already filed. A year with no rate of its
             own inherits the most recent earlier one.
@@ -138,7 +142,7 @@ export function SettingsModal({ settings, expenses = [], mileage = [], onClose }
           {activeYears.slice(0, 6).map((y) => (
             <div className="gl-row" key={`rate-${y}`}>
               <span className="gl-mono" style={{ width: 46, color: "var(--dim)" }}>{y}</span>
-              <div style={{ flex: 1, fontSize: 11.5, color: "var(--dim)" }}>
+              <div style={{ flex: 1, fontSize: 12.5, color: "var(--dim)" }}>
                 {hasOwnRate(settings, y) ? "set for this year" : "inherited"}
               </div>
               <input className="gl-input gl-mono" type="number" min="0" max="10" step="0.001"
@@ -154,7 +158,7 @@ export function SettingsModal({ settings, expenses = [], mileage = [], onClose }
           ))}
 
           <div className="gl-label" style={{ marginTop: 16 }}>Filed years</div>
-          <p style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 0 }}>
+          <p style={{ fontSize: 12.5, color: "var(--dim)", marginTop: 0 }}>
             Locking a year refuses edits to expenses, mileage, and income dated in it — including
             moving a record out of it. It's a guardrail against changing a return that's already
             been filed, not a permission: you can unlock any year here.
@@ -167,9 +171,9 @@ export function SettingsModal({ settings, expenses = [], mileage = [], onClose }
                 <div style={{ flex: 1, fontSize: 12.5, color: isLocked ? "var(--brass)" : "var(--dim)" }}>
                   {isLocked ? "Filed — edits refused" : "Open for edits"}
                 </div>
-                <button className="gl-btn" style={{ padding: "3px 9px", fontSize: 11.5 }}
+                <button className="gl-btn" style={{ padding: "3px 9px", fontSize: 12.5 }}
                   onClick={() => save({ lockedYears: toggleYearLock(settings, y) })}>
-                  {isLocked ? <><LockOpen size={11} /> Unlock</> : <><Lock size={11} /> Mark filed</>}
+                  {isLocked ? <><LockOpen aria-hidden size={11} /> Unlock</> : <><Lock aria-hidden size={11} /> Mark filed</>}
                 </button>
               </div>
             );
@@ -190,16 +194,16 @@ export function SettingsModal({ settings, expenses = [], mileage = [], onClose }
               <div style={{ flex: 1, fontSize: 12.5 }}>
                 {g.business.count > 0 && (
                   <span style={{ color: "var(--fern)" }}>
-                    <ShieldAlert size={11} style={{ verticalAlign: "middle" }} /> {g.business.count} business
+                    <ShieldAlert aria-hidden size={11} style={{ verticalAlign: "middle" }} /> {g.business.count} business
                   </span>
                 )}
                 {g.business.count > 0 && g.personal.count > 0 && <span style={{ color: "var(--dim)" }}> · </span>}
                 {g.personal.count > 0 && <span style={{ color: "var(--dim)" }}>{g.personal.count} personal</span>}
               </div>
               {g.personal.count > 0 && Number(g.year) < thisYear && (
-                <button className="gl-btn" style={{ padding: "3px 8px", fontSize: 11.5 }} disabled={busy}
+                <button className="gl-btn" style={{ padding: "3px 8px", fontSize: 12.5 }} disabled={busy}
                   onClick={() => purgePersonal(g.year, g.personal.paths)}>
-                  <Trash2 size={11} /> Clear personal
+                  <Trash2 aria-hidden size={11} /> Clear personal
                 </button>
               )}
             </div>
@@ -208,7 +212,7 @@ export function SettingsModal({ settings, expenses = [], mileage = [], onClose }
       )}
 
       {settings.businessMode && (
-        <p style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 8, marginBottom: 0 }}>
+        <p style={{ fontSize: 12.5, color: "var(--dim)", marginTop: 8, marginBottom: 0 }}>
           The IRS standard mileage rate changes every year — check the current rate and update it here.
           Tax figures in Greenline are estimates for planning, not tax advice or a filed return.
         </p>

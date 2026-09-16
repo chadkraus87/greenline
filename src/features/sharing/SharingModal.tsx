@@ -65,16 +65,16 @@ export function SharingModal({ onClose }: { onClose: () => void }) {
           <div className="gl-label" style={{ marginTop: 14 }}>Invitations for you</div>
           {pendingIn.map((s) => (
             <div className="gl-row" key={s.id}>
-              <CalendarDays size={15} color="var(--brass)" style={{ flexShrink: 0 }} />
+              <CalendarDays aria-hidden size={15} color="var(--brass)" style={{ flexShrink: 0 }} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 500 }}>{s.otherEmail}</div>
-                <div style={{ fontSize: 11.5, color: "var(--dim)" }}>
+                <div style={{ fontSize: 12.5, color: "var(--dim)" }}>
                   wants to share their calendar · {PERM_LABEL[s.permission].toLowerCase()}
                 </div>
               </div>
               <button className="gl-btn primary" style={{ padding: "4px 9px", fontSize: 12 }} disabled={busy}
                 onClick={() => act_(() => act.respondToShare(s.id, true), "Calendar shared with you")}>
-                <Check size={12} /> Accept
+                <Check aria-hidden size={12} /> Accept
               </button>
               <button className="gl-btn" style={{ padding: "4px 9px", fontSize: 12 }} disabled={busy}
                 onClick={() => act_(() => act.respondToShare(s.id, false), "Invitation declined")}>
@@ -100,11 +100,11 @@ export function SharingModal({ onClose }: { onClose: () => void }) {
             </select>
           </Field>
           <button className="gl-btn primary" type="submit" disabled={busy || !email.trim()} style={{ height: 38 }}>
-            <Send size={13} /> Invite
+            <Send aria-hidden size={13} /> Invite
           </button>
         </div>
       </form>
-      <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 6 }}>
+      <div style={{ fontSize: 12.5, color: "var(--dim)", marginTop: 6 }}>
         They must accept before anything is shared. You can change or remove access at any time.
       </div>
 
@@ -116,7 +116,7 @@ export function SharingModal({ onClose }: { onClose: () => void }) {
             background: s.status === "accepted" ? "var(--fern)" : s.status === "pending" ? "var(--brass)" : "var(--dim)" }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 500 }}>{s.otherEmail}</div>
-            <div style={{ fontSize: 11.5, color: "var(--dim)" }}>
+            <div style={{ fontSize: 12.5, color: "var(--dim)" }}>
               {s.status === "accepted" ? "active" : s.status}
             </div>
           </div>
@@ -127,7 +127,7 @@ export function SharingModal({ onClose }: { onClose: () => void }) {
             <option value="write">View &amp; edit</option>
           </select>
           <button className="gl-icon-btn" disabled={busy} aria-label={`Stop sharing with ${s.otherEmail}`}
-            onClick={() => act_(() => act.removeShare(s.id), "Sharing stopped")}><Trash2 size={13} /></button>
+            onClick={() => act_(() => act.removeShare(s.id), "Sharing stopped")}><Trash2 aria-hidden size={13} /></button>
         </div>
       ))}
 
@@ -135,13 +135,13 @@ export function SharingModal({ onClose }: { onClose: () => void }) {
       <div className="gl-label" style={{ marginTop: 16 }}>Calendars shared with you</div>
       {activeIn.length === 0 ? <Empty text="No one has shared a calendar with you yet." /> : activeIn.map((s) => (
         <div className="gl-row" key={s.id}>
-          <CalendarDays size={15} color="var(--sky)" style={{ flexShrink: 0 }} />
+          <CalendarDays aria-hidden size={15} color="var(--sky)" style={{ flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 500 }}>{s.otherEmail}</div>
-            <div style={{ fontSize: 11.5, color: "var(--dim)" }}>{PERM_LABEL[s.permission]}</div>
+            <div style={{ fontSize: 12.5, color: "var(--dim)" }}>{PERM_LABEL[s.permission]}</div>
           </div>
           <button className="gl-icon-btn" disabled={busy} aria-label={`Leave ${s.otherEmail}'s calendar`}
-            onClick={() => act_(() => act.removeShare(s.id), "Removed")}><X size={13} /></button>
+            onClick={() => act_(() => act.removeShare(s.id), "Removed")}><X aria-hidden size={13} /></button>
         </div>
       ))}
     </Modal>

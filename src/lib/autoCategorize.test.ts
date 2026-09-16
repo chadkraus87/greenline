@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { merchantKey, buildMerchantIndex, suggestCategory, suggestionLabel } from "./autoCategorize";
+import { merchantKey, buildMerchantIndex, suggestCategory, suggestionLabel, fallbackCategoryId } from "./autoCategorize";
 import type { Category, Expense } from "../types";
 
 const cats: Category[] = [
@@ -99,5 +99,20 @@ describe("suggestionLabel", () => {
     expect(suggestionLabel({ source: "history", seen: 1 })).toContain("previous");
     expect(suggestionLabel({ source: "rule", seen: 0 })).toBe("recognised merchant");
     expect(suggestionLabel({ source: "none", seen: 0 })).toBe("");
+  });
+});
+
+describe("fallbackCategoryId", () => {
+  it("files unknown spending under a catch-all, not whatever happens to be first", () => {
+    // The default list starts with Housing; unknown coffee used to land there.
+    const cats = [{ id: "housing", name: "Housing" }, { id: "food", name: "Food" }, { id: "misc", name: "Miscellaneous" }];
+    expect(fallbackCategoryId(cats)).toBe("misc");
+  });
+  it("recognises other common catch-all names", () => {
+    expect(fallbackCategoryId([{ id: "a", name: "Rent" }, { id: "o", name: "Other" }])).toBe("o");
+  });
+  it("uses the first category only when there's no catch-all", () => {
+    expect(fallbackCategoryId([{ id: "a", name: "Rent" }, { id: "b", name: "Food" }])).toBe("a");
+    expect(fallbackCategoryId([])).toBe("");
   });
 });

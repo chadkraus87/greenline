@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { AppData } from "../types";
 import { loadAll } from "../db/repo";
 import { onDataChange } from "../data/sync";
+import { DEMO, demoData } from "../dev/demo";
 
 /** Loads the signed-in user's full dataset and refetches whenever a mutation
  *  emits a change. Small per-user data → a full refetch is simplest and fast. */
@@ -10,6 +11,7 @@ export function useAppData(): { data: AppData | null; loading: boolean; reload: 
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
+    if ((import.meta.env.DEV && DEMO)) { setData(demoData()); setLoading(false); return; }
     try {
       setData(await loadAll());
     } finally {

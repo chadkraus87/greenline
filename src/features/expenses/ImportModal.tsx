@@ -1,9 +1,10 @@
 import { useMemo, useRef, useState } from "react";
+import { setBankTransactionStatus, type BankTransaction } from "../../db/bank";
 import { Upload, AlertTriangle, Check, FileText, Camera, Loader2 } from "lucide-react";
 import { Modal, Field, Empty } from "../../components/ui";
 import type { Category, Expense } from "../../types";
 import { SCHEDULE_C } from "../../lib/tax";
-import { buildMerchantIndex, suggestCategory } from "../../lib/autoCategorize";
+import { buildMerchantIndex, suggestCategory, fallbackCategoryId } from "../../lib/autoCategorize";
 import { money } from "../../lib/money";
 import {
   parseCsv, detectColumns, looksLikeHeader, buildRows, markDuplicates,
@@ -13,22 +14,31 @@ import * as act from "../../db/actions";
 import { useToast } from "../../hooks/useToasts";
 
 /** Import a bank or card CSV. Nothing is written until the preview is confirmed. */
-export function ImportModal({ categories, existing, businessMode, onClose }:
-  { categories: Category[]; existing: Expense[]; businessMode?: boolean; onClose: () => void }) {
+export function ImportModal({ categories, existing, businessMode, onClose, bankTransactions }:
+  { categories: Category[]; existing: Expense[]; businessMode?: boolean; onClose: () => void;
+    /** Review transactions pulled from a connected bank instead of a file. */
+    bankTransactions?: BankTransaction[] }) {
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [headers, setHeaders] = useState<string[]>([]);
   const [dataRows, setDataRows] = useState<string[][]>([]);
   const [map, setMap] = useState<ColumnMap | null>(null);
   const [flipSign, setFlipSign] = useState(false);
-  const [categoryId, setCategoryId] = useState(categories[0]?.id ?? "");
+  const [categoryId, setCategoryId] = useState(fallbackCategoryId(categories));
   const [overrides, setOverrides] = useState<Record<number, boolean>>({});
   const [asBusiness, setAsBusiness] = useState(false);
   const [taxCategory, setTaxCategory] = useState("");
   const [busy, setBusy] = useState(false);
   const [scanning, setScanning] = useState("");
   /** Rows produced by a scan (statement or batch); bypasses column mapping. */
-  const [scannedRows, setScannedRows] = useState<ImportRow[] | null>(null);
+  // Bank rows are already structured, so they skip straight to review. The sign
+  // comes from the bank: negative means money out.
+  const [scannedRows, setScannedRows] = useState<ImportRow[] | null>(() => bankTransactions
+    ? rowsFromTransactions(bankTransactions.map((b) => ({
+        date: b.posted, description: b.payee || b.description,
+        amount: Math.abs(b.amount), direction: b.amount < 0 ? "debit" as const : "credit" as const,
+      })))
+    : null);
   const [scanNote, setScanNote] = useState("");
   const [sourceReceipt, setSourceReceipt] = useState<string | undefined>();
   const scanRef = useRef<HTMLInputElement>(null);
@@ -129,10 +139,28 @@ export function ImportModal({ categories, existing, businessMode, onClose }:
           taxCategory: res?.taxCategory,
         };
       }));
+      if (bankTransactions) {
+        await setBankTransactionStatus(selected.map((r) => bankTransactions[r.index].id), "added");
+      }
       toast(`Imported ${n} transaction${n === 1 ? "" : "s"}`);
       onClose();
     } catch (e) {
       toast((e as Error).message || "Import failed", "clay");
+    } finally { setBusy(false); }
+  };
+
+  // Bank rows left unticked — money in, already recorded, or passed over — can be
+  // cleared from the inbox in one go instead of reappearing every sync.
+  const notSelected = bankTransactions ? effective.filter((r) => !(r.include && !r.error)) : [];
+  const dismissRest = async () => {
+    if (!bankTransactions || notSelected.length === 0) return;
+    setBusy(true);
+    try {
+      await setBankTransactionStatus(notSelected.map((r) => bankTransactions[r.index].id), "dismissed");
+      toast(`Cleared ${notSelected.length} from the inbox`);
+      onClose();
+    } catch (e) {
+      toast((e as Error).message || "Couldn't update", "clay");
     } finally { setBusy(false); }
   };
 
@@ -147,7 +175,7 @@ export function ImportModal({ categories, existing, businessMode, onClose }:
   );
 
   return (
-    <Modal title="Import from your bank" onClose={onClose} wide>
+    <Modal title={bankTransactions ? "Review bank transactions" : "Import from your bank"} onClose={onClose} wide>
       {headers.length === 0 && !scannedRows ? (
         <>
           <p style={{ fontSize: 13, color: "var(--dim)", marginTop: 6 }}>
@@ -157,16 +185,16 @@ export function ImportModal({ categories, existing, businessMode, onClose }:
           </p>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
             <button className="gl-btn primary" disabled={!!scanning} onClick={() => fileRef.current?.click()}>
-              <Upload size={14} /> Choose CSV file
+              <Upload aria-hidden size={14} /> Choose CSV file
             </button>
             <button className="gl-btn" disabled={!!scanning}
               onClick={() => { setScanMode("statement"); setTimeout(() => scanRef.current?.click(), 0); }}>
-              {scanning === "Reading statement…" ? <Loader2 size={14} className="gl-spin" /> : <FileText size={14} />}
+              {scanning === "Reading statement…" ? <Loader2 aria-hidden size={14} className="gl-spin" /> : <FileText aria-hidden size={14} />}
               Scan a statement (PDF)
             </button>
             <button className="gl-btn" disabled={!!scanning}
               onClick={() => { setScanMode("batch"); setTimeout(() => scanRef.current?.click(), 0); }}>
-              {scanning === "Reading receipts…" ? <Loader2 size={14} className="gl-spin" /> : <Camera size={14} />}
+              {scanning === "Reading receipts…" ? <Loader2 aria-hidden size={14} className="gl-spin" /> : <Camera aria-hidden size={14} />}
               Photo of several receipts
             </button>
           </div>
@@ -179,10 +207,15 @@ export function ImportModal({ categories, existing, businessMode, onClose }:
         </>
       ) : (
         <>
+          {bankTransactions && (
+            <p style={{ fontSize: 14, color: "var(--dim)", marginTop: 6 }}>
+              New since your last sync, categorized from your history. Nothing becomes an expense until you import it.
+            </p>
+          )}
           {scanNote && (
             <div style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 12px", borderRadius: 9,
               background: "var(--fern-soft)", marginTop: 8, fontSize: 12.5 }}>
-              <FileText size={15} color="var(--fern)" style={{ flexShrink: 0, marginTop: 1 }} />
+              <FileText aria-hidden size={15} color="var(--fern)" style={{ flexShrink: 0, marginTop: 1 }} />
               <div>Read from your document — {scanNote}. Nothing is saved until you import.</div>
             </div>
           )}
@@ -228,7 +261,7 @@ export function ImportModal({ categories, existing, businessMode, onClose }:
                       {SCHEDULE_C.map((l) => <option key={l.id} value={l.id}>{l.label} (line {l.line})</option>)}
                     </select>
                   </Field>
-                  <div style={{ fontSize: 11.5, color: "var(--dim)", marginTop: 4 }}>
+                  <div style={{ fontSize: 12.5, color: "var(--dim)", marginTop: 4 }}>
                     You can refine individual rows afterwards on the Expenses tab.
                   </div>
                 </div>
@@ -245,7 +278,7 @@ export function ImportModal({ categories, existing, businessMode, onClose }:
 
           {!mapOk && (
             <div style={{ display: "flex", gap: 8, padding: "9px 12px", borderRadius: 9, background: "var(--clay-soft)", marginTop: 10, fontSize: 12.5 }}>
-              <AlertTriangle size={15} color="var(--clay)" style={{ flexShrink: 0 }} />
+              <AlertTriangle aria-hidden size={15} color="var(--clay)" style={{ flexShrink: 0 }} />
               Pick at least a date column and an amount (or money-out) column.
             </div>
           )}
@@ -273,9 +306,9 @@ export function ImportModal({ categories, existing, businessMode, onClose }:
                       <td className="gl-mono" style={{ color: "var(--dim)" }}>{r.date || "—"}</td>
                       <td>
                         {cleanDescription(r.description) || <span style={{ color: "var(--dim)" }}>(no description)</span>}
-                        {r.duplicate && <span style={{ fontSize: 10.5, color: "var(--brass)", marginLeft: 6 }}>already recorded</span>}
-                        {r.isCredit && !r.error && <span style={{ fontSize: 10.5, color: "var(--fern)", marginLeft: 6 }}>money in</span>}
-                        {r.error && <span style={{ fontSize: 10.5, color: "var(--clay)", marginLeft: 6 }}>{r.error}</span>}
+                        {r.duplicate && <span style={{ fontSize: 12, color: "var(--brass)", marginLeft: 6 }}>already recorded</span>}
+                        {r.isCredit && !r.error && <span style={{ fontSize: 12, color: "var(--fern)", marginLeft: 6 }}>money in</span>}
+                        {r.error && <span style={{ fontSize: 12, color: "var(--clay)", marginLeft: 6 }}>{r.error}</span>}
                       </td>
                       <td style={{ fontSize: 12, color: "var(--dim)", whiteSpace: "nowrap" }}>
                         {r.error ? "—" : (categories.find((c) => c.id === byIndex.get(r.index)?.categoryId)?.name ?? "—")}
@@ -291,10 +324,15 @@ export function ImportModal({ categories, existing, businessMode, onClose }:
             )}
           </div>
 
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+            {bankTransactions && notSelected.length > 0 && (
+              <button className="gl-btn quiet" style={{ marginRight: "auto" }} disabled={busy} onClick={dismissRest}>
+                Dismiss {notSelected.length} not selected
+              </button>
+            )}
             <button className="gl-btn" onClick={onClose}>Cancel</button>
             <button className="gl-btn primary" disabled={busy || !mapOk || selected.length === 0} onClick={doImport}>
-              <Check size={14} /> Import {selected.length || ""}
+              <Check aria-hidden size={14} /> Import {selected.length || ""}
             </button>
           </div>
         </>

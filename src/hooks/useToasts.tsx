@@ -20,7 +20,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div className="gl-toast" role="status" aria-live="polite">
         {toasts.map((t) => (
-          <div key={t.id} style={{ borderLeftColor: `var(--${t.tone})` }}><span>{t.msg}</span></div>
+          <div key={t.id} style={{ ["--tone" as string]: `var(--${t.tone})` }}><span>{t.msg}</span></div>
         ))}
       </div>
     </Ctx.Provider>

@@ -72,17 +72,17 @@ export function ReceiptMatchModal({ expenses, onClose }: { expenses: Expense[]; 
                     </td>
                     <td>
                       <div>{m.scanned.merchant || m.scanned.title}</div>
-                      <div className="gl-mono" style={{ fontSize: 11, color: "var(--dim)" }}>
+                      <div className="gl-mono" style={{ fontSize: 12, color: "var(--dim)" }}>
                         {m.scanned.date} · {money(m.scanned.amount)}
                       </div>
                     </td>
                     <td>
                       <div>{m.charge.merchant || m.charge.title}</div>
-                      <div className="gl-mono" style={{ fontSize: 11, color: "var(--dim)" }}>
+                      <div className="gl-mono" style={{ fontSize: 12, color: "var(--dim)" }}>
                         {m.charge.date} · {money(m.charge.amount)}
                       </div>
                     </td>
-                    <td style={{ fontSize: 11.5, color: m.confidence === "high" ? "var(--fern)" : "var(--brass)" }}>
+                    <td style={{ fontSize: 12.5, color: m.confidence === "high" ? "var(--fern)" : "var(--brass)" }}>
                       {m.reason}
                     </td>
                     <td className="gl-mono" style={{ textAlign: "right", fontSize: 12 }}>
@@ -96,7 +96,7 @@ export function ReceiptMatchModal({ expenses, onClose }: { expenses: Expense[]; 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
             <button className="gl-btn" onClick={onClose}>Cancel</button>
             <button className="gl-btn primary" disabled={busy || selected.length === 0} onClick={apply}>
-              <Link2 size={14} /> Merge {selected.length || ""}
+              <Link2 aria-hidden size={14} /> Merge {selected.length || ""}
             </button>
           </div>
         </>
